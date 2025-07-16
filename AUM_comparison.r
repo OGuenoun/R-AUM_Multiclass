@@ -1,16 +1,34 @@
-source("utils_AUM.R")
+source("R-AUM_Multiclass/utils_AUM.R")
 library(data.table)
-MNIST_dt <- fread("mnist_train.csv/mnist_train.csv")
+MNIST_dt <- fread("~/data_Classif/MNIST.csv")
 data.table(
   name=names(MNIST_dt),
   first_row=unlist(MNIST_dt[1]),
   last_row=unlist(MNIST_dt[.N]))
-MNIST_dt[, labels := factor(label)]
-mtask <- mlr3::TaskClassif$new(
-  "MNIST", MNIST_dt, target="labels")
-mtask$col_roles$stratum <- "labels"
+MNIST_dt[, label := factor(y)]
+MNIST_dt_others <- MNIST_dt[label != 1]
+percentages <- c(1, 0.1, 0.01)
 
-mtask$col_roles$feature <- grep("^[0-9]+$", names(MNIST_dt), value=TRUE)
+imbalanced_sets <- lapply(percentages, function(pct) {
+  dt_1_subset <- MNIST_dt[label == 1][sample(.N, floor(.N * pct))]
+  result <- rbindlist(list(MNIST_dt_others, dt_1_subset))
+  return(result)
+})
+rm(MNIST_dt_others,MNIST_dt)
+make_task<-function(id,dataset){
+  mtask <- mlr3::TaskClassif$new(
+    id, dataset, target="label")
+  mtask$col_roles$stratum <- "label"
+  
+  mtask$col_roles$feature <- grep("^[0-9]+$", names(dataset), value=TRUE)
+  return(mtask)
+}
+
+list_tasks=list(
+  make_task("MNIST_balanced",imbalanced_sets[[1]]),
+  make_task("MNIST_imbalance_0.1",imbalanced_sets[[2]]),
+  make_task("MNIST_imbalance_0.01",imbalanced_sets[[3]])
+)
 
 Micro_AUC = R6::R6Class("Micro_AUC",
   inherit = mlr3::MeasureClassif,
@@ -109,7 +127,7 @@ kfoldcv <- mlr3::rsmp("cv")
 kfoldcv$param_set$values$folds <- 4
 
 (bench.grid <- mlr3::benchmark_grid(
-  mtask,
+  list_tasks,
   learner.list,
   kfoldcv))
 reg.dir <- "2025-07-16-AUM"
