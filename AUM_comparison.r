@@ -1,6 +1,7 @@
 source("R-AUM_Multiclass/utils_AUM.R")
 library(data.table)
 MNIST_dt <- fread("~/data_Classif/MNIST.csv")
+MNIST_dt <- fread("~/data_Classif/MNIST.csv")
 data.table(
   name=names(MNIST_dt),
   first_row=unlist(MNIST_dt[1]),
