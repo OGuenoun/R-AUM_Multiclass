@@ -3,14 +3,14 @@ library(data.table)
 (SOAK <- mlr3resampling::ResamplingSameOtherSizesCV$new())
 unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/MNIST.csv")
 task.list <- list()
-data.csv <- sub("_unbalanced", "", unb.csv)
+data.csv <- sub("_unbalanced", "", unb.csv.vec)
 MNIST_dt <- fread(file=data.csv)
-subset_dt <- fread(unb.csv) 
+subset_dt <- fread(unb.csv.vec) 
 task_dt <- data.table(subset_dt, MNIST_dt)[, label := factor(y)]
 feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
 subset.name.vec <- names(subset_dt)
-subset.name.vec <- c("seed1_prop0.01","seed2_prop0.001","seed1_prop0.1")
-(data.name <- gsub(".*/|[.]csv$", "", unb.csv))
+subset.name.vec <- c("seed2_prop0.01", "seed1_prop0.1")
+(data.name <- gsub(".*/|[.]csv$", "", unb.csv.vec))
 for(subset.name in subset.name.vec){
   subset_vec <- task_dt[[subset.name]]
   task_id <- paste0(data.name,"_",subset.name)
@@ -49,8 +49,32 @@ Micro_AUC = R6::R6Class("Micro_AUC",
     }
   )
 )
+Macro_AUC = R6::R6Class("Macro_AUC",
+                        inherit = mlr3::MeasureClassif,
+                        public = list(
+                          initialize = function() { 
+                            super$initialize(
+                              id = "auc_macro",
+                              packages = "torch",
+                              properties = character(),
+                              task_properties = "multiclass",
+                              predict_type = "prob",
+                              range = c(0, 1),
+                              minimize = FALSE
+                            )
+                          }
+                        ),
+                        private = list(
+                          .score = function(prediction, ...) {
+                            probs <- prediction$prob
+                            truth <- prediction$truth
+                            Proposed_AUC_macro(pred_tensor = probs,label_tensor = truth)
+                          }
+                        )
+)
 auc_micro <- Micro_AUC$new()
-measure_list <- c(mlr3::msrs("classif.mauc_aunu"), auc_micro)
+auc_macro<-Macro_AUC$new()
+measure_list <- mlr3::msrs("classif.mauc_aunu")
 nn_AUM_micro_loss <- torch::nn_module(
   "nn_AUM_micro_loss",
   inherit = torch::nn_mse_loss,
