@@ -1,16 +1,17 @@
 source("R-AUM_Multiclass/utils_AUM.R")
 library(data.table)
 (SOAK <- mlr3resampling::ResamplingSameOtherSizesCV$new())
-unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/*csv")
+unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/MNIST.csv")
 task.list <- list()
-for(unb.csv in unb.csv.vec){
-  data.csv <- sub("_unbalanced", "", unb.csv)
-  MNIST_dt <- fread(file=data.csv)
-  subset_dt <- fread(unb.csv)
-  task_dt <- data.table(subset_dt, MNIST_dt)[, label := factor(y)]
-  feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
-  subset.name <- "seed2_prop0.01"
-  (data.name <- gsub(".*/|[.]csv$", "", unb.csv))
+data.csv <- sub("_unbalanced", "", unb.csv)
+MNIST_dt <- fread(file=data.csv)
+subset_dt <- fread(unb.csv) 
+task_dt <- data.table(subset_dt, MNIST_dt)[, label := factor(y)]
+feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
+subset.name.vec <- names(subset_dt)
+subset.name.vec <- c("seed1_prop0.01","seed2_prop0.001","seed1_prop0.1")
+(data.name <- gsub(".*/|[.]csv$", "", unb.csv))
+for(subset.name in subset.name.vec){
   subset_vec <- task_dt[[subset.name]]
   task_id <- paste0(data.name,"_",subset.name)
   itask <- mlr3::TaskClassif$new(
@@ -19,14 +20,9 @@ for(unb.csv in unb.csv.vec){
   itask$col_roles$subset <- subset.name
   itask$col_roles$feature <- feature.names
   task.list[[task_id]] <- itask
+}
+SOAK$param_set$values$subsets <- "SO"
 
-}
-if(FALSE){#verify odd and y distributions.
-  SOAK$instantiate(itask)
-  SOAK_row <- SOAK$instance$iteration.dt[
-    train.subsets=="same" & test.subset=="balanced" & test.fold==1]
-  itask$backend$data(SOAK_row$train[[1]], c("label","y"))[, table(label, y)]
-}
 
 Micro_AUC = R6::R6Class("Micro_AUC",
   inherit = mlr3::MeasureClassif,
