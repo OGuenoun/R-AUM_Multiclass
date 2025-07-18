@@ -1,34 +1,32 @@
 source("R-AUM_Multiclass/utils_AUM.R")
 library(data.table)
-MNIST_dt <- fread("~/data_Classif/MNIST.csv")
-data.table(
-  name=names(MNIST_dt),
-  first_row=unlist(MNIST_dt[1]),
-  last_row=unlist(MNIST_dt[.N]))
-MNIST_dt[, label := factor(y)]
-MNIST_dt_others <- MNIST_dt[label != 1]
-percentages <- c(1, 0.1, 0.01)
+(SOAK <- mlr3resampling::ResamplingSameOtherSizesCV$new())
+unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/*csv")
+task.list <- list()
+for(unb.csv in unb.csv.vec){
+  data.csv <- sub("_unbalanced", "", unb.csv)
+  MNIST_dt <- fread(file=data.csv)
+  subset_dt <- fread(unb.csv)
+  task_dt <- data.table(subset_dt, MNIST_dt)[, label := factor(y)]
+  feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
+  subset.name <- "seed2_prop0.01"
+  (data.name <- gsub(".*/|[.]csv$", "", unb.csv))
+  subset_vec <- task_dt[[subset.name]]
+  task_id <- paste0(data.name,"_",subset.name)
+  itask <- mlr3::TaskClassif$new(
+    task_id, task_dt[subset_vec != ""], target="label")
+  itask$col_roles$stratum <- "y"
+  itask$col_roles$subset <- subset.name
+  itask$col_roles$feature <- feature.names
+  task.list[[task_id]] <- itask
 
-imbalanced_sets <- lapply(percentages, function(pct) {
-  dt_1_subset <- MNIST_dt[label == 1][sample(.N, floor(.N * pct))]
-  result <- rbindlist(list(MNIST_dt_others, dt_1_subset))
-  return(result)
-})
-rm(MNIST_dt_others,MNIST_dt)
-make_task<-function(id,dataset){
-  mtask <- mlr3::TaskClassif$new(
-    id, dataset, target="label")
-  mtask$col_roles$stratum <- "label"
-  
-  mtask$col_roles$feature <- grep("^[0-9]+$", names(dataset), value=TRUE)
-  return(mtask)
 }
-
-list_tasks=list(
-  make_task("MNIST_balanced",imbalanced_sets[[1]]),
-  make_task("MNIST_imbalance_0.1",imbalanced_sets[[2]]),
-  make_task("MNIST_imbalance_0.01",imbalanced_sets[[3]])
-)
+if(FALSE){#verify odd and y distributions.
+  SOAK$instantiate(itask)
+  SOAK_row <- SOAK$instance$iteration.dt[
+    train.subsets=="same" & test.subset=="balanced" & test.fold==1]
+  itask$backend$data(SOAK_row$train[[1]], c("label","y"))[, table(label, y)]
+}
 
 Micro_AUC = R6::R6Class("Micro_AUC",
   inherit = mlr3::MeasureClassif,
@@ -51,7 +49,7 @@ Micro_AUC = R6::R6Class("Micro_AUC",
     .score = function(prediction, ...) {
       probs <- prediction$prob
       truth <- prediction$truth
-      Proposed_AUM_micro(pred_tensor = probs,label_tensor = truth)
+      Proposed_AUC_micro(pred_tensor = probs,label_tensor = truth)
     }
   )
 )
@@ -63,10 +61,7 @@ nn_AUM_micro_loss <- torch::nn_module(
   initialize = function() {
     super$initialize()
   },
-  forward = function(input, target) {
-    print(table(as.integer(target)))
-    Proposed_AUM_micro(input, target)
-  }
+  forward =Proposed_AUM_micro
 )
 nn_AUM_macro_loss <- torch::nn_module(
   "nn_AUM_macro_loss",
@@ -74,9 +69,7 @@ nn_AUM_macro_loss <- torch::nn_module(
   initialize = function() {
     super$initialize()
   },
-  forward = function(input, target) {
-    Proposed_AUM_macro(input, target)
-  }
+  forward =Proposed_AUM_macro
 )
 n.epochs<-200
 make_torch_learner <- function(id,loss){
@@ -123,13 +116,11 @@ learner.list<-list(
     make_torch_learner("linear_Macro_average",nn_AUM_macro_loss),
     make_torch_learner("linear_Micro_average",nn_AUM_micro_loss)
 )
-kfoldcv <- mlr3::rsmp("cv")
-kfoldcv$param_set$values$folds <- 4
 
 (bench.grid <- mlr3::benchmark_grid(
-  list_tasks,
+  task.list,
   learner.list,
-  kfoldcv))
+  SOAK))
 reg.dir <- "2025-07-16-AUM"
 cache.RData <- paste0(reg.dir,".RData")
 if(file.exists(cache.RData)){
@@ -147,8 +138,8 @@ if(file.exists(cache.RData)){
     job.table <- batchtools::getJobTable(reg=reg)
     chunks <- data.frame(job.table, chunk=1)
     batchtools::submitJobs(chunks, resources=list(
-      walltime = 60*60,#seconds
-      memory = 2000,#megabytes per cpu
+      walltime = 2*60*60,#seconds
+      memory = 6000,#megabytes per cpu
       ncpus=1,  #>1 for multicore/parallel jobs.
       ntasks=1, #>1 for MPI jobs.
       chunks.as.arrayjobs=TRUE), reg=reg)
