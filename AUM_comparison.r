@@ -9,18 +9,17 @@ subset_dt <- fread(unb.csv.vec)
 task_dt <- data.table(subset_dt, MNIST_dt)[, label := factor(y)]
 feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
 subset.name.vec <- names(subset_dt)
-subset.name.vec <- c("seed2_prop0.01", "seed1_prop0.1")
+subset.name <- "seed1_prop0.01"
 (data.name <- gsub(".*/|[.]csv$", "", unb.csv.vec))
-for(subset.name in subset.name.vec){
-  subset_vec <- task_dt[[subset.name]]
-  task_id <- paste0(data.name,"_",subset.name)
-  itask <- mlr3::TaskClassif$new(
-    task_id, task_dt[subset_vec != ""], target="label")
-  itask$col_roles$stratum <- "y"
-  itask$col_roles$subset <- subset.name
-  itask$col_roles$feature <- feature.names
-  task.list[[task_id]] <- itask
-}
+subset_vec <- task_dt[[subset.name]]
+task_id <- paste0(data.name,"_",subset.name)
+itask <- mlr3::TaskClassif$new(
+  task_id, task_dt[subset_vec != ""], target="label")
+itask$col_roles$stratum <- "y"
+itask$col_roles$subset <- subset.name
+itask$col_roles$feature <- feature.names
+task.list[[task_id]] <- itask
+
 SOAK$param_set$values$subsets <- "SO"
 
 
@@ -43,38 +42,34 @@ Micro_AUC = R6::R6Class("Micro_AUC",
   private = list(
     # define score as private method
     .score = function(prediction, ...) {
-      probs <- prediction$prob
-      truth <- prediction$truth
-      Proposed_AUC_micro(pred_tensor = probs,label_tensor = truth)
+      ROC_AUC_micro(prediction$prob, prediction$truth)
     }
   )
 )
 Macro_AUC = R6::R6Class("Macro_AUC",
-                        inherit = mlr3::MeasureClassif,
-                        public = list(
-                          initialize = function() { 
-                            super$initialize(
-                              id = "auc_macro",
-                              packages = "torch",
-                              properties = character(),
-                              task_properties = "multiclass",
-                              predict_type = "prob",
-                              range = c(0, 1),
-                              minimize = FALSE
-                            )
-                          }
-                        ),
-                        private = list(
-                          .score = function(prediction, ...) {
-                            probs <- prediction$prob
-                            truth <- prediction$truth
-                            Proposed_AUC_macro(pred_tensor = probs,label_tensor = truth)
-                          }
+  inherit = mlr3::MeasureClassif,
+  public = list(
+    initialize = function() { 
+      super$initialize(
+        id = "auc_macro",
+        packages = "torch",
+        properties = character(),
+        task_properties = "multiclass",
+        predict_type = "prob",
+        range = c(0, 1),
+        minimize = FALSE
+      )
+    }
+  ),
+  private = list(
+    .score = function(prediction, ...) {
+      ROC_AUC_macro(prediction$prob, prediction$truth)
+    }
                         )
 )
 auc_micro <- Micro_AUC$new()
 auc_macro<-Macro_AUC$new()
-measure_list <- mlr3::msrs("classif.mauc_aunu")
+measure_list <- c(auc_micro,auc_macro)
 nn_AUM_micro_loss <- torch::nn_module(
   "nn_AUM_micro_loss",
   inherit = torch::nn_mse_loss,
@@ -112,7 +107,7 @@ make_torch_learner <- function(id,loss){
         mlr3torch::t_clbk("history")),
       mlr3pipelines::po(
         "torch_model_classif",
-        batch_size = 10000,
+        batch_size = 100000,
         patience=n.epochs,
         measures_valid=measure_list,
         measures_train=measure_list,
