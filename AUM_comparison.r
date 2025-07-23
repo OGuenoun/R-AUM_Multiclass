@@ -1,5 +1,8 @@
+###Loading necessary
 source("R-AUM_Multiclass/utils_AUM.R")
 library(data.table)
+
+##Creating task 
 (SOAK <- mlr3resampling::ResamplingSameOtherSizesCV$new())
 unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/MNIST.csv")
 task.list <- list()
@@ -20,9 +23,13 @@ itask$col_roles$subset <- subset.name
 itask$col_roles$feature <- feature.names
 task.list[[task_id]] <- itask
 
+
+
+
+####keeping only same and other
 SOAK$param_set$values$subsets <- "SO"
 
-
+####Defining custom measures
 Micro_AUC = R6::R6Class("Micro_AUC",
   inherit = mlr3::MeasureClassif,
   public = list(
@@ -40,7 +47,6 @@ Micro_AUC = R6::R6Class("Micro_AUC",
   ),
 
   private = list(
-    # define score as private method
     .score = function(prediction, ...) {
       pred_tensor=torch::torch_tensor(prediction$prob)
       label_tensor=torch::torch_tensor(prediction$truth)
@@ -144,8 +150,27 @@ Macro_AUC = R6::R6Class("Macro_AUC",
 )
 auc_micro <- Micro_AUC$new()
 auc_macro<-Macro_AUC$new()
-measure_list <- c(auc_micro,auc_macro)
+measure_list <- c(auc_macro,auc_micro)
+## END defining custom measures
 
+##Defining custom losses
+weighted_ce <- function(input,target) {
+  n_classes <- input$size(2)
+  counts <- torch::torch_bincount(target, minlength = n_classes)
+  
+  weights <- 1 / (counts + 1e-8)
+  weights <- weights / weights$sum()
+  
+  torch::nnf_cross_entropy(input,target, weight = weights)
+  }
+nn_weighted_CE_loss <- torch::nn_module(
+  "nn_weighted_CE_loss",
+  inherit = torch::nn_mse_loss,
+  initialize = function() {
+    super$initialize()
+  },
+  forward =weighted_ce
+)
 nn_AUM_micro_loss <- torch::nn_module(
   "nn_AUM_micro_loss",
   inherit = torch::nn_mse_loss,
@@ -162,7 +187,8 @@ nn_AUM_macro_loss <- torch::nn_module(
   },
   forward =Proposed_AUM_macro
 )
-n.epochs<-200
+n.pixels=28
+n.epochs<-300
 make_torch_learner <- function(id,loss){
   po_list <- c(
     list(
@@ -171,6 +197,24 @@ make_torch_learner <- function(id,loss){
         selector = mlr3pipelines::selector_type(c("numeric", "integer"))),
       mlr3torch::PipeOpTorchIngressNumeric$new()),
     list(
+      mlr3pipelines::po(
+      "nn_reshape",
+      shape=c(-1,1,n.pixels,n.pixels)),
+    mlr3pipelines::po(
+      "nn_conv2d_1",
+      out_channels = 20,
+      kernel_size = 6),
+    mlr3pipelines::po("nn_relu_1", inplace = TRUE),
+    mlr3pipelines::po(
+      "nn_max_pool2d_1",
+      kernel_size = 4),
+    mlr3pipelines::po("nn_flatten"),
+    mlr3pipelines::po(
+      "nn_linear",
+      out_features = 50),
+    mlr3pipelines::po("nn_relu_2", inplace = TRUE)),
+    list(
+      mlr3torch::nn("linear", out_features=10),
       mlr3pipelines::po("nn_head"),
       mlr3pipelines::po(
         "torch_loss",
@@ -203,10 +247,12 @@ make_torch_learner <- function(id,loss){
       store_models = TRUE)
 }
 learner.list<-list(
-    make_torch_learner("linear_Cross_entropy",torch::nn_cross_entropy_loss),
-    make_torch_learner("linear_Macro_average",nn_AUM_macro_loss),
-    make_torch_learner("linear_Micro_average",nn_AUM_micro_loss)
+    make_torch_learner("conv_CE_unweighted",torch::nn_cross_entropy_loss),
+    make_torch_learner("conv_Macro_AUM",nn_AUM_macro_loss),
+    make_torch_learner("conv_Micro_AUM",nn_AUM_micro_loss),
+    make_torch_learner("conv_CE_weighted",nn_weighted_CE_loss)
 )
+### END defining custom losses
 
 (bench.grid <- mlr3::benchmark_grid(
   task.list,
@@ -229,8 +275,8 @@ if(file.exists(cache.RData)){
     job.table <- batchtools::getJobTable(reg=reg)
     chunks <- data.frame(job.table, chunk=1)
     batchtools::submitJobs(chunks, resources=list(
-      walltime = 2*60*60,#seconds
-      memory = 6000,#megabytes per cpu
+      walltime = 1*60*60,#seconds
+      memory = 16000,#megabytes per cpu
       ncpus=1,  #>1 for multicore/parallel jobs.
       ntasks=1, #>1 for MPI jobs.
       chunks.as.arrayjobs=TRUE), reg=reg)
@@ -250,6 +296,8 @@ if(file.exists(cache.RData)){
   }
   save(bench.result, file=cache.RData)
 }
+##Plotting
+library(ggplot2)
 score_dt <- mlr3resampling::score(bench.result, measure_list)
 score_out <- score_dt[, .(
   task_id, test.subset, train.subsets, test.fold, algorithm, auc_micro,auc_macro)]
@@ -269,7 +317,7 @@ long_dt[, test.subset := paste0("test = ", test.subset)]
 
 
 ggplot(long_dt, aes(x = mean, y = algorithm, color = metric)) +
-  geom_point(position = position_dodge(width = 0.5), size = 2) +
+  geom_point(position = position_dodge(width = 0.5), size = 1) +
   geom_errorbarh(
     aes(xmin = mean - sd, xmax = mean + sd),
     position = position_dodge(width = 0.5),
@@ -277,8 +325,9 @@ ggplot(long_dt, aes(x = mean, y = algorithm, color = metric)) +
   ) +
   facet_grid(test.subset ~ train.subsets) +
   labs(
-    title = "AUC Mean ± SD by Algorithm",
+    title = "AUC Mean ± SD by Algorithm (3 folds), imbalance ~ 1%",
     x = "AUC",
     y = "Algorithm",
     color = "Metric"
   )
+
