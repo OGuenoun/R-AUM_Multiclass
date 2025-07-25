@@ -2,10 +2,10 @@
 I used [AUM_comparison.r](AUM_comparison.r) to train NNs on the cluster . I generated [score_conv_grid_search.csv](score_conv_grid_search.csv) which contains test results for CNNs using different loss functions
 
 <p align="center">
-  <img src="AUM_comparison_1percent.png" alt="Description" width="400"/>
+  <img src="AUM_comparison_1percent.png" alt="Description" width="600"/>
 </p>
 <p align="center">
-  <img src="AUM_comparison_0,1percent.png" alt="Description" width="400"/>
+  <img src="AUM_comparison_0,1percent.png" alt="Description" width="600"/>
 </p>
 
 ## Analysis
