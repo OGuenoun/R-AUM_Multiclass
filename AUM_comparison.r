@@ -4,7 +4,7 @@ library(data.table)
 
 ##Creating task 
 (SOAK <- mlr3resampling::ResamplingSameOtherSizesCV$new())
-unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/MNIST.csv")
+unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/EMNIST.csv")
 task.list <- list()
 data.csv <- sub("_unbalanced", "", unb.csv.vec)
 MNIST_dt <- fread(file=data.csv)
@@ -12,7 +12,7 @@ subset_dt <- fread(unb.csv.vec)
 task_dt <- data.table(subset_dt, MNIST_dt)[, label := factor(y)]
 feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
 subset.name.vec <- names(subset_dt)
-subset.name <- "seed1_prop0.01"
+subset.name <- "seed1_prop0.001"
 (data.name <- gsub(".*/|[.]csv$", "", unb.csv.vec))
 subset_vec <- task_dt[[subset.name]]
 task_id <- paste0(data.name,"_",subset.name)
@@ -189,7 +189,7 @@ nn_AUM_macro_loss <- torch::nn_module(
 )
 n.pixels=28
 n.epochs<-300
-make_torch_learner <- function(id,loss){
+make_torch_learner <- function(id,loss,lr_list){
   po_list <- c(
     list(
       mlr3pipelines::po(
@@ -221,7 +221,9 @@ make_torch_learner <- function(id,loss){
         loss),
       mlr3pipelines::po(
         "torch_optimizer",
-        mlr3torch::t_opt("sgd", lr=0.2)),
+        mlr3torch::t_opt("sgd", lr = paradox::to_tune(
+          levels = lr_list 
+        ))),
       mlr3pipelines::po(
         "torch_callbacks",
         mlr3torch::t_clbk("history")),
@@ -239,18 +241,20 @@ make_torch_learner <- function(id,loss){
     mlr3::set_validate(glearner, validate = 0.5)
     mlr3tuning::auto_tuner(
       learner = glearner,
-      tuner = mlr3tuning::tnr("internal"),
+      tuner = mlr3tuning::tnr("grid_search"),
       resampling = mlr3::rsmp("insample"),
-      measure = mlr3::msr("internal_valid_score", minimize = TRUE),
-      term_evals = 1,
-      id=id,
-      store_models = TRUE)
+      measure = mlr3::msr("internal_valid_score", minimize = FALSE),
+      term_evals = length(lr_list),
+      id = id,
+      store_models = TRUE
+    )
 }
+lr_list=c(10^seq(-1,1),5*10^seq(-1,1))
 learner.list<-list(
-    make_torch_learner("conv_CE_unweighted",torch::nn_cross_entropy_loss),
-    make_torch_learner("conv_Macro_AUM",nn_AUM_macro_loss),
-    make_torch_learner("conv_Micro_AUM",nn_AUM_micro_loss),
-    make_torch_learner("conv_CE_weighted",nn_weighted_CE_loss)
+    make_torch_learner("conv_CE_unweighted",torch::nn_cross_entropy_loss,lr_list),
+    make_torch_learner("conv_Macro_AUM",nn_AUM_macro_loss,lr_list),
+    make_torch_learner("conv_Micro_AUM",nn_AUM_micro_loss,lr_list),
+    make_torch_learner("conv_CE_weighted",nn_weighted_CE_loss,lr_list)
 )
 ### END defining custom losses
 
@@ -258,7 +262,8 @@ learner.list<-list(
   task.list,
   learner.list,
   SOAK))
-reg.dir <- "2025-07-16-AUM"
+
+reg.dir <- "2025-07-24-AUM"
 cache.RData <- paste0(reg.dir,".RData")
 if(file.exists(cache.RData)){
   load(cache.RData)
@@ -275,7 +280,7 @@ if(file.exists(cache.RData)){
     job.table <- batchtools::getJobTable(reg=reg)
     chunks <- data.frame(job.table, chunk=1)
     batchtools::submitJobs(chunks, resources=list(
-      walltime = 1*60*60,#seconds
+      walltime = 4*60*60,#seconds
       memory = 16000,#megabytes per cpu
       ncpus=1,  #>1 for multicore/parallel jobs.
       ntasks=1, #>1 for MPI jobs.
@@ -301,33 +306,6 @@ library(ggplot2)
 score_dt <- mlr3resampling::score(bench.result, measure_list)
 score_out <- score_dt[, .(
   task_id, test.subset, train.subsets, test.fold, algorithm, auc_micro,auc_macro)]
-summary_dt <- score_out[, .(
-  mean_auc_micro = mean(auc_micro),
-  sd_auc_micro = sd(auc_micro),
-  mean_auc_macro = mean(auc_macro),
-  sd_auc_macro = sd(auc_macro)
-), by = .(test.subset, train.subsets, algorithm)]
-long_dt <- melt(summary_dt,
-                measure = patterns(mean = "^mean_auc", sd = "^sd_auc"),
-                variable.name = "metric",
-                value.name = c("mean", "sd")
-)
-long_dt[, metric := factor(metric, labels = c("auc_micro", "auc_macro"))]
-long_dt[, test.subset := paste0("test = ", test.subset)]
+fwrite(score_out, "~/R-AUM_Multiclass/score_conv_grid_search.csv")
 
-
-ggplot(long_dt, aes(x = mean, y = algorithm, color = metric)) +
-  geom_point(position = position_dodge(width = 0.5), size = 1) +
-  geom_errorbarh(
-    aes(xmin = mean - sd, xmax = mean + sd),
-    position = position_dodge(width = 0.5),
-    height = 0.25
-  ) +
-  facet_grid(test.subset ~ train.subsets) +
-  labs(
-    title = "AUC Mean ± SD by Algorithm (3 folds), imbalance ~ 1%",
-    x = "AUC",
-    y = "Algorithm",
-    color = "Metric"
-  )
 
