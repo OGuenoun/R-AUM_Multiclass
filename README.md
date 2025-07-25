@@ -16,6 +16,6 @@ I used [AUM_comparison.r](AUM_comparison.r) to train NNs on the cluster . I gene
 - Training Micro AUM on an imbalanced dataset and testing it on a balanced  set gives poor Micro AUC performance. This is because Micro AUM treats all examples equally during training and does not optimize for the minority class. So, the model fails to perform well on the balanced test set where the minority class is better represented.
 
 ## Next steps:
-- Look for cases where AUM is better
+- Look for cases where AUM is better than weighted cross-entropy
 - Try application : pre-training for LMs
-- smaller batchsize
+- smaller batchsize: it is better to have at least one example for the under represented class so that Macro AUC could assure class fairness, however it is possible to the lowest possible batchsize
