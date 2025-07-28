@@ -249,7 +249,7 @@ make_torch_learner <- function(id,loss,lr_list){
       store_models = TRUE
     )
 }
-lr_list=c(10^seq(-1,1),5*10^seq(-1,1))
+lr_list=c(10^seq(-2,0),5*10^seq(-1,1))
 learner.list<-list(
     make_torch_learner("conv_CE_unweighted",torch::nn_cross_entropy_loss,lr_list),
     make_torch_learner("conv_Macro_AUM",nn_AUM_macro_loss,lr_list),
@@ -306,6 +306,34 @@ library(ggplot2)
 score_dt <- mlr3resampling::score(bench.result, measure_list)
 score_out <- score_dt[, .(
   task_id, test.subset, train.subsets, test.fold, algorithm, auc_micro,auc_macro)]
-fwrite(score_out, "~/R-AUM_Multiclass/score_conv_grid_search.csv")
+(score_torch <- score_dt[
+  grepl("torch",learner_id)
+][
+  , best_epoch := sapply(
+    learner, function(L)unlist(L$tuning_result$internal_tuned_values))
+][])
 
 
+(history_torch <- score_torch[, {
+  L <- learner[[1]]
+  archive <- L$archive$data
+  best_row_idx <- which.max(archive$internal_valid_score)
+  M <- L$archive$learners(best_row_idx)[[1]]$model
+  M$torch_model_classif$model$callbacks$history
+}, by=.(learner_id, iteration)])
+(history_long <- nc::capture_melt_single(
+  history_torch,
+  set=nc::alevels(valid="validation", train="subtrain"),
+  ".",
+  measure=nc::alevels("auc_macro", "auc_micro")))
+fwrite(history_long,"~/R-AUM_Multiclass/Learning_curves.csv")
+ggplot()+
+  theme_bw()+
+  geom_vline(aes(
+    xintercept=best_epoch),
+    data=score_torch)+
+  geom_line(aes(
+    epoch, value, color=set),
+    data=history_long[measure=="auc_macro"])+
+  facet_grid(learner_id~iteration, labeller=label_both)+
+  scale_x_continuous("epoch")
