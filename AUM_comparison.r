@@ -256,6 +256,7 @@ learner.list<-list(
     make_torch_learner("conv_Micro_AUM",nn_AUM_micro_loss,lr_list),
     make_torch_learner("conv_CE_weighted",nn_weighted_CE_loss,lr_list)
 )
+
 ### END defining custom losses
 
 (bench.grid <- mlr3::benchmark_grid(
@@ -304,10 +305,53 @@ if(file.exists(cache.RData)){
 ##Plotting
 library(ggplot2)
 score_dt <- mlr3resampling::score(bench.result, measure_list)
-score_out <- score_dt[, .(
-  task_id, test.subset, train.subsets, test.fold, algorithm, auc_micro,auc_macro)]
+score_dt_copy=copy(score_dt)
+
+best_scores <- mapply(function(L) {
+  archive <- L$archive$data
+  best_row_idx <- which.max(archive$internal_valid_score) #internal_valid gives only macro_auc here
+  M <- L$archive$learners(best_row_idx)[[1]]$model
+  scores=M$torch_model_classif$model$internal_valid_scores # here it gives both micro and macro # 
+}, score_dt_copy$learner, SIMPLIFY = FALSE)
+score_out=score_dt_copy[, c("auc_macro", "auc_micro") := lapply(transpose(best_scores),as.numeric)]
+
+## Plot is not on test as model was not stored for the best learning rate(?) but on validation score 
+summary_dt <- score_out[, .(
+  mean_auc_micro = mean(auc_micro),
+  sd_auc_micro = sd(auc_micro),
+  mean_auc_macro = mean(auc_macro),
+  sd_auc_macro = sd(auc_macro)
+), by = .(test.subset, train.subsets, algorithm)]
+long_dt <- melt(summary_dt,
+                measure = patterns(mean = "^mean_auc", sd = "^sd_auc"),
+                variable.name = "metric",
+)
+long_dt[, metric := factor(metric, labels = c("auc_micro", "auc_macro"))]
+long_dt[, test.subset := paste0("test = ", test.subset)]
+
+
+ggplot(long_dt, aes(x = mean, y = algorithm, color = metric)) +
+  geom_point(position = position_dodge(width = 0.5), size = 1) +
+  geom_errorbarh(
+    aes(xmin = mean - sd, xmax = mean + sd),
+    position = position_dodge(width = 0.5),
+    height = 0.25
+  ) +
+  facet_grid(test.subset ~ train.subsets) +
+  labs(
+    title = " EMNIST,AUC mean ± SD by Algorithm (3 folds), imbalance ~ 0.1%",
+    x = "AUC",
+    y = "Algorithm",
+    color = "Metric"
+  )
+
+
+
+
+
+
 (score_torch <- score_dt[
-  grepl("torch",learner_id)
+  grepl("conv",learner_id)
 ][
   , best_epoch := sapply(
     learner, function(L)unlist(L$tuning_result$internal_tuned_values))
