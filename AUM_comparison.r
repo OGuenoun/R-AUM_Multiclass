@@ -4,7 +4,7 @@ library(data.table)
 
 ##Creating task 
 (SOAK <- mlr3resampling::ResamplingSameOtherSizesCV$new())
-unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/EMNIST.csv")
+unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/MNIST.csv")
 task.list <- list()
 data.csv <- sub("_unbalanced", "", unb.csv.vec)
 MNIST_dt <- fread(file=data.csv)
@@ -12,16 +12,18 @@ subset_dt <- fread(unb.csv.vec)
 task_dt <- data.table(subset_dt, MNIST_dt)[, label := factor(y)]
 feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
 subset.name.vec <- names(subset_dt)
-subset.name <- "seed1_prop0.001"
+subset.name.vec <- c("seed1_prop0.001","seed2_prop0.01","seed1_prop0.1")
 (data.name <- gsub(".*/|[.]csv$", "", unb.csv.vec))
-subset_vec <- task_dt[[subset.name]]
-task_id <- paste0(data.name,"_",subset.name)
-itask <- mlr3::TaskClassif$new(
-  task_id, task_dt[subset_vec != ""], target="label")
-itask$col_roles$stratum <- c("y",subset.name)
-itask$col_roles$subset <- subset.name
-itask$col_roles$feature <- feature.names
-task.list[[task_id]] <- itask
+for(subset.name in subset.name.vec){
+  subset_vec <- task_dt[[subset.name]]
+  task_id <- paste0(data.name,"_",subset.name)
+  itask <- mlr3::TaskClassif$new(
+    task_id, task_dt[subset_vec != ""], target="label")
+  itask$col_roles$stratum <- c("y", subset.name)
+  itask$col_roles$subset <- subset.name
+  itask$col_roles$feature <- feature.names
+  task.list[[task_id]] <- itask
+}
 
 
 
@@ -31,121 +33,121 @@ SOAK$param_set$values$subsets <- "SO"
 
 ####Defining custom measures
 Micro_AUC = R6::R6Class("Micro_AUC",
-  inherit = mlr3::MeasureClassif,
-  public = list(
-    initialize = function() { 
-      super$initialize(
-        id = "auc_micro",
-        packages = "torch",
-        properties = character(),
-        task_properties = "multiclass",
-        predict_type = "prob",
-        range = c(0, 1),
-        minimize = FALSE
-      )
-    }
-  ),
-
-  private = list(
-    .score = function(prediction, ...) {
-      pred_tensor=torch::torch_tensor(prediction$prob)
-      label_tensor=torch::torch_tensor(prediction$truth)
-      ROC_AUC_micro<-function(pred_tensor,label_tensor){
-        n_class=pred_tensor$size(2)
-        one_hot_labels = torch::nnf_one_hot(label_tensor, num_classes=n_class) 
-        is_positive = one_hot_labels
-        is_negative =1-one_hot_labels
-        fn_diff = -is_positive$flatten()
-        fp_diff = is_negative$flatten()
-        thresh_tensor = -pred_tensor$flatten()
-        fn_denom = is_positive$sum()
-        fp_denom = is_negative$sum()
-        sorted_indices = torch::torch_argsort(thresh_tensor)
-        sorted_fp_cum = fp_diff[sorted_indices]$cumsum(dim=1) / fp_denom
-        sorted_fn_cum = -fn_diff[sorted_indices]$flip(1)$cumsum(dim=1)$flip(1) / fn_denom
-        
-        sorted_thresh = thresh_tensor[sorted_indices]
-        sorted_is_diff = sorted_thresh$diff() != 0
-        sorted_fp_end = torch::torch_cat(c(sorted_is_diff, torch::torch_tensor(TRUE)))
-        sorted_fn_end = torch::torch_cat(c(torch::torch_tensor(TRUE), sorted_is_diff))
-        
-        uniq_thresh = sorted_thresh[sorted_fp_end]
-        uniq_fp_after = sorted_fp_cum[sorted_fp_end]
-        uniq_fn_before = sorted_fn_cum[sorted_fn_end]
-        
-        FPR = torch::torch_cat(c(torch::torch_tensor(0.0), uniq_fp_after))
-        FNR = torch::torch_cat(c(uniq_fn_before, torch::torch_tensor(0.0)))
-        roc <- list(
-          FPR=FPR,
-          FNR=FNR,
-          TPR=1 - FNR,
-          "min(FPR,FNR)"=torch::torch_minimum(FPR, FNR),
-          min_constant=torch::torch_cat(c(torch::torch_tensor(-1), uniq_thresh)),
-          max_constant=torch::torch_cat(c(uniq_thresh, torch::torch_tensor(0))))
-        FPR_diff = roc$FPR[2:N]-roc$FPR[1:-2]
-        TPR_sum = roc$TPR[2:N]+roc$TPR[1:-2]
-        return(torch::torch_sum(FPR_diff*TPR_sum/2.0))
-      }
-      auc=ROC_AUC_micro(pred_tensor, label_tensor)
-      as.numeric(auc)
-    }
-  )
+                        inherit = mlr3::MeasureClassif,
+                        public = list(
+                          initialize = function() { 
+                            super$initialize(
+                              id = "auc_micro",
+                              packages = "torch",
+                              properties = character(),
+                              task_properties = "multiclass",
+                              predict_type = "prob",
+                              range = c(0, 1),
+                              minimize = FALSE
+                            )
+                          }
+                        ),
+                        
+                        private = list(
+                          .score = function(prediction, ...) {
+                            pred_tensor=torch::torch_tensor(prediction$prob)
+                            label_tensor=torch::torch_tensor(prediction$truth)
+                            ROC_AUC_micro<-function(pred_tensor,label_tensor){
+                              n_class=pred_tensor$size(2)
+                              one_hot_labels = torch::nnf_one_hot(label_tensor, num_classes=n_class) 
+                              is_positive = one_hot_labels
+                              is_negative =1-one_hot_labels
+                              fn_diff = -is_positive$flatten()
+                              fp_diff = is_negative$flatten()
+                              thresh_tensor = -pred_tensor$flatten()
+                              fn_denom = is_positive$sum()
+                              fp_denom = is_negative$sum()
+                              sorted_indices = torch::torch_argsort(thresh_tensor)
+                              sorted_fp_cum = fp_diff[sorted_indices]$cumsum(dim=1) / fp_denom
+                              sorted_fn_cum = -fn_diff[sorted_indices]$flip(1)$cumsum(dim=1)$flip(1) / fn_denom
+                              
+                              sorted_thresh = thresh_tensor[sorted_indices]
+                              sorted_is_diff = sorted_thresh$diff() != 0
+                              sorted_fp_end = torch::torch_cat(c(sorted_is_diff, torch::torch_tensor(TRUE)))
+                              sorted_fn_end = torch::torch_cat(c(torch::torch_tensor(TRUE), sorted_is_diff))
+                              
+                              uniq_thresh = sorted_thresh[sorted_fp_end]
+                              uniq_fp_after = sorted_fp_cum[sorted_fp_end]
+                              uniq_fn_before = sorted_fn_cum[sorted_fn_end]
+                              
+                              FPR = torch::torch_cat(c(torch::torch_tensor(0.0), uniq_fp_after))
+                              FNR = torch::torch_cat(c(uniq_fn_before, torch::torch_tensor(0.0)))
+                              roc <- list(
+                                FPR=FPR,
+                                FNR=FNR,
+                                TPR=1 - FNR,
+                                "min(FPR,FNR)"=torch::torch_minimum(FPR, FNR),
+                                min_constant=torch::torch_cat(c(torch::torch_tensor(-1), uniq_thresh)),
+                                max_constant=torch::torch_cat(c(uniq_thresh, torch::torch_tensor(0))))
+                              FPR_diff = roc$FPR[2:N]-roc$FPR[1:-2]
+                              TPR_sum = roc$TPR[2:N]+roc$TPR[1:-2]
+                              return(torch::torch_sum(FPR_diff*TPR_sum/2.0))
+                            }
+                            auc=ROC_AUC_micro(pred_tensor, label_tensor)
+                            as.numeric(auc)
+                          }
+                        )
 )
 Macro_AUC = R6::R6Class("Macro_AUC",
-  inherit = mlr3::MeasureClassif,
-  public = list(
-    initialize = function() { 
-      super$initialize(
-        id = "auc_macro",
-        packages = "torch",
-        properties = character(),
-        task_properties = "multiclass",
-        predict_type = "prob",
-        range = c(0, 1),
-        minimize = FALSE
-      )
-    }
-  ),
-  private = list(
-    .score = function(prediction, ...) {
-      pred_tensor=torch::torch_tensor(prediction$prob)
-      label_tensor=torch::torch_tensor(prediction$truth)
-      ROC_AUC_macro<-function(pred_tensor,label_tensor){
-        n_class=pred_tensor$size(2)
-        one_hot_labels = torch::nnf_one_hot(label_tensor, num_classes = n_class)
-        is_positive = one_hot_labels
-        is_negative =1-one_hot_labels
-        fn_diff = -is_positive
-        fp_diff = is_negative
-        thresh_tensor = -pred_tensor
-        fn_denom = is_positive$sum(dim = 1)
-        fp_denom = is_negative$sum(dim = 1)
-        sorted_indices = torch::torch_argsort(thresh_tensor, dim = 1)
-        sorted_fp_cum = torch::torch_gather(fp_diff, dim=1, index=sorted_indices)$cumsum(1)/fp_denom
-        sorted_fn_cum = -torch::torch_gather(fn_diff, dim=1, index=sorted_indices)$flip(1)$cumsum(1)$flip(1)/fn_denom
-        sorted_thresh = torch::torch_gather(thresh_tensor, dim=1, index=sorted_indices)
-        zeros_vec=torch::torch_zeros(1,n_class)
-        FPR = torch::torch_cat(c(zeros_vec, sorted_fp_cum))
-        FNR = torch::torch_cat(c(sorted_fn_cum, zeros_vec))
-        roc<- list(
-          FPR_all_classes= FPR,
-          FNR_all_classes= FNR,
-          TPR_all_classes= 1 - FNR,
-          "min(FPR,FNR)"= torch::torch_minimum(FPR, FNR),
-          min_constant = torch::torch_cat(c(-torch::torch_ones(1,n_class), sorted_thresh)),
-          max_constant = torch::torch_cat(c(sorted_thresh, zeros_vec))
-        )
-        FPR_diff = roc$FPR_all_classes[2:N,] - roc$FPR_all_classes[1:-2,]
-        TPR_sum = roc$TPR_all_classes[2:N,] + roc$TPR_all_classes[1:-2,]
-        sum=torch::torch_sum(FPR_diff * TPR_sum / 2.0,dim=1)
-        mask = torch::torch_isnan(sum)$logical_not()
-        sum_valid = sum[mask]
-        mean_valid = sum_valid$mean()
-      }
-      
-      auc=ROC_AUC_macro(pred_tensor, label_tensor)
-      as.numeric(auc)
-    }
+                        inherit = mlr3::MeasureClassif,
+                        public = list(
+                          initialize = function() { 
+                            super$initialize(
+                              id = "auc_macro",
+                              packages = "torch",
+                              properties = character(),
+                              task_properties = "multiclass",
+                              predict_type = "prob",
+                              range = c(0, 1),
+                              minimize = FALSE
+                            )
+                          }
+                        ),
+                        private = list(
+                          .score = function(prediction, ...) {
+                            pred_tensor=torch::torch_tensor(prediction$prob)
+                            label_tensor=torch::torch_tensor(prediction$truth)
+                            ROC_AUC_macro<-function(pred_tensor,label_tensor){
+                              n_class=pred_tensor$size(2)
+                              one_hot_labels = torch::nnf_one_hot(label_tensor, num_classes = n_class)
+                              is_positive = one_hot_labels
+                              is_negative =1-one_hot_labels
+                              fn_diff = -is_positive
+                              fp_diff = is_negative
+                              thresh_tensor = -pred_tensor
+                              fn_denom = is_positive$sum(dim = 1)
+                              fp_denom = is_negative$sum(dim = 1)
+                              sorted_indices = torch::torch_argsort(thresh_tensor, dim = 1)
+                              sorted_fp_cum = torch::torch_gather(fp_diff, dim=1, index=sorted_indices)$cumsum(1)/fp_denom
+                              sorted_fn_cum = -torch::torch_gather(fn_diff, dim=1, index=sorted_indices)$flip(1)$cumsum(1)$flip(1)/fn_denom
+                              sorted_thresh = torch::torch_gather(thresh_tensor, dim=1, index=sorted_indices)
+                              zeros_vec=torch::torch_zeros(1,n_class)
+                              FPR = torch::torch_cat(c(zeros_vec, sorted_fp_cum))
+                              FNR = torch::torch_cat(c(sorted_fn_cum, zeros_vec))
+                              roc<- list(
+                                FPR_all_classes= FPR,
+                                FNR_all_classes= FNR,
+                                TPR_all_classes= 1 - FNR,
+                                "min(FPR,FNR)"= torch::torch_minimum(FPR, FNR),
+                                min_constant = torch::torch_cat(c(-torch::torch_ones(1,n_class), sorted_thresh)),
+                                max_constant = torch::torch_cat(c(sorted_thresh, zeros_vec))
+                              )
+                              FPR_diff = roc$FPR_all_classes[2:N,] - roc$FPR_all_classes[1:-2,]
+                              TPR_sum = roc$TPR_all_classes[2:N,] + roc$TPR_all_classes[1:-2,]
+                              sum=torch::torch_sum(FPR_diff * TPR_sum / 2.0,dim=1)
+                              mask = torch::torch_isnan(sum)$logical_not()
+                              sum_valid = sum[mask]
+                              mean_valid = sum_valid$mean()
+                            }
+                            
+                            auc=ROC_AUC_macro(pred_tensor, label_tensor)
+                            as.numeric(auc)
+                          }
                         )
 )
 auc_micro <- Micro_AUC$new()
@@ -162,7 +164,7 @@ weighted_ce <- function(input,target) {
   weights <- weights / weights$sum()
   
   torch::nnf_cross_entropy(input,target, weight = weights)
-  }
+}
 nn_weighted_CE_loss <- torch::nn_module(
   "nn_weighted_CE_loss",
   inherit = torch::nn_mse_loss,
@@ -189,7 +191,7 @@ nn_AUM_macro_loss <- torch::nn_module(
 )
 n.pixels=28
 n.epochs<-300
-make_torch_learner <- function(id,loss,lr_list){
+make_torch_learner <- function(id,loss,lr){
   po_list <- c(
     list(
       mlr3pipelines::po(
@@ -198,21 +200,21 @@ make_torch_learner <- function(id,loss,lr_list){
       mlr3torch::PipeOpTorchIngressNumeric$new()),
     list(
       mlr3pipelines::po(
-      "nn_reshape",
-      shape=c(-1,1,n.pixels,n.pixels)),
-    mlr3pipelines::po(
-      "nn_conv2d_1",
-      out_channels = 20,
-      kernel_size = 6),
-    mlr3pipelines::po("nn_relu_1", inplace = TRUE),
-    mlr3pipelines::po(
-      "nn_max_pool2d_1",
-      kernel_size = 4),
-    mlr3pipelines::po("nn_flatten"),
-    mlr3pipelines::po(
-      "nn_linear",
-      out_features = 50),
-    mlr3pipelines::po("nn_relu_2", inplace = TRUE)),
+        "nn_reshape",
+        shape=c(-1,1,n.pixels,n.pixels)),
+      mlr3pipelines::po(
+        "nn_conv2d_1",
+        out_channels = 20,
+        kernel_size = 6),
+      mlr3pipelines::po("nn_relu_1", inplace = TRUE),
+      mlr3pipelines::po(
+        "nn_max_pool2d_1",
+        kernel_size = 4),
+      mlr3pipelines::po("nn_flatten"),
+      mlr3pipelines::po(
+        "nn_linear",
+        out_features = 50),
+      mlr3pipelines::po("nn_relu_2", inplace = TRUE)),
     list(
       mlr3torch::nn("linear", out_features=10),
       mlr3pipelines::po("nn_head"),
@@ -221,9 +223,7 @@ make_torch_learner <- function(id,loss,lr_list){
         loss),
       mlr3pipelines::po(
         "torch_optimizer",
-        mlr3torch::t_opt("sgd", lr = paradox::to_tune(
-          levels = lr_list 
-        ))),
+        mlr3torch::t_opt("sgd", lr =lr)),
       mlr3pipelines::po(
         "torch_callbacks",
         mlr3torch::t_clbk("history")),
@@ -235,29 +235,36 @@ make_torch_learner <- function(id,loss,lr_list){
         measures_train=measure_list,
         predict_type="prob",
         epochs = paradox::to_tune(upper = n.epochs, internal = TRUE)))
-    )
-    graph <- Reduce(mlr3pipelines::concat_graphs, po_list)
-    glearner <- mlr3::as_learner(graph)
-    mlr3::set_validate(glearner, validate = 0.5)
-    mlr3tuning::auto_tuner(
-      learner = glearner,
-      tuner = mlr3tuning::tnr("grid_search"),
-      resampling = mlr3::rsmp("insample"),
-      measure = mlr3::msr("internal_valid_score", minimize = FALSE),
-      term_evals = length(lr_list),
-      id = id,
-      store_models = TRUE
-    )
+  )
+  graph <- Reduce(mlr3pipelines::concat_graphs, po_list)
+  glearner <- mlr3::as_learner(graph)
+  mlr3::set_validate(glearner, validate = 0.5)
+  mlr3tuning::auto_tuner(
+    learner = glearner,
+    tuner = mlr3tuning::tnr("internal"),
+    resampling = mlr3::rsmp("insample"),
+    measure = mlr3::msr("internal_valid_score", minimize = FALSE),
+    term_evals = 1,
+    id = id,
+    store_models = TRUE
+  )
 }
-lr_list=c(10^seq(-2,0),5*10^seq(-1,1))
-learner.list<-list(
-    make_torch_learner("conv_CE_unweighted",torch::nn_cross_entropy_loss,lr_list),
-    make_torch_learner("conv_Macro_AUM",nn_AUM_macro_loss,lr_list),
-    make_torch_learner("conv_Micro_AUM",nn_AUM_micro_loss,lr_list),
-    make_torch_learner("conv_CE_weighted",nn_weighted_CE_loss,lr_list)
-)
-
+lr_list=c(0.1,0.5,1)
+learner.list<-c()
+for(lr in lr_list){
+  learner.list<-c(learner.list,c(
+    make_torch_learner(paste0("lr",lr,"conv_CE_unweighted"),torch::nn_cross_entropy_loss,lr),
+    make_torch_learner(paste0("lr",lr,"conv_Macro_AUM"),nn_AUM_macro_loss,lr),
+    make_torch_learner(paste0("lr",lr,"conv_Micro_AUM"),nn_AUM_micro_loss,lr),
+    make_torch_learner(paste0("lr",lr,"conv_CE_weighted"),nn_weighted_CE_loss,lr))
+  )
+}
 ### END defining custom losses
+
+
+
+
+
 
 (bench.grid <- mlr3::benchmark_grid(
   task.list,
@@ -266,6 +273,14 @@ learner.list<-list(
 
 reg.dir <- "2025-07-24-AUM"
 cache.RData <- paste0(reg.dir,".RData")
+keep_history <- function(x){
+  learners <- x$learner_state$model$marshaled$tuning_instance$archive$learners
+  x$learner_state$model <- if(is.function(learners)){
+    L <- learners(1)[[1]]
+    x$history <- L$model$torch_model_classif$model$callbacks$history
+  }
+  x
+}
 if(file.exists(cache.RData)){
   load(cache.RData)
 }else{
@@ -290,7 +305,7 @@ if(file.exists(cache.RData)){
     jobs.after <- batchtools::getJobTable(reg=reg)
     table(jobs.after$error)
     ids <- jobs.after[is.na(error), job.id]
-    bench.result <- mlr3batchmark::reduceResultsBatchmark(ids, reg = reg)
+    bench.result <- mlr3batchmark::reduceResultsBatchmark(ids, reg = reg,fun=keep_history)
   }else{
     ## In the code below, we declare a multisession future plan to
     ## compute each benchmark iteration in parallel on this computer
@@ -305,79 +320,79 @@ if(file.exists(cache.RData)){
 ##Plotting
 library(ggplot2)
 score_dt <- mlr3resampling::score(bench.result, measure_list)
-score_dt_copy=copy(score_dt)
+score_out <- score_dt[, .(
+  task_id, test.subset, train.subsets, test.fold, learner_id, auc_micro,auc_macro,learner,iteration,learner)]
+score_out[, lr := as.numeric(sub("lr([0-9.]+).*", "\\1", learner_id))]
+score_out[, learner_name := sub("lr[0-9.]+", "", learner_id)]
+best_lr_score_out=score_out[
+  , .SD[which.max(auc_macro)], by = .(learner_name,task_id,test.subset, train.subsets,test.fold)
+]
 
-best_scores <- mapply(function(L) {
-  archive <- L$archive$data
-  best_row_idx <- which.max(archive$internal_valid_score) #internal_valid gives only macro_auc here
-  M <- L$archive$learners(best_row_idx)[[1]]$model
-  scores=M$torch_model_classif$model$internal_valid_scores # here it gives both micro and macro # 
-}, score_dt_copy$learner, SIMPLIFY = FALSE)
-score_out=score_dt_copy[, c("auc_macro", "auc_micro") := lapply(transpose(best_scores),as.numeric)]
 
-## Plot is not on test as model was not stored for the best learning rate(?) but on validation score 
-summary_dt <- score_out[, .(
+summary_dt <- best_lr_score_out[, .(
   mean_auc_micro = mean(auc_micro),
   sd_auc_micro = sd(auc_micro),
   mean_auc_macro = mean(auc_macro),
   sd_auc_macro = sd(auc_macro)
-), by = .(test.subset, train.subsets, algorithm)]
+), by = .(test.subset, train.subsets, learner_name,task_id)]
+
+#fwrite(summary_dt,"~/R-AUM_Multiclass/conv_results.csv")
+
+
+
+
 long_dt <- melt(summary_dt,
                 measure = patterns(mean = "^mean_auc", sd = "^sd_auc"),
                 variable.name = "metric",
 )
 long_dt[, metric := factor(metric, labels = c("auc_micro", "auc_macro"))]
+
 long_dt[, test.subset := paste0("test = ", test.subset)]
+long_dt[, train.subsets := paste0("train = ", train.subsets)]
+long_dt[,task_id:= sub("MNIST_seed[12]_prop", "imbalance=", task_id)]
 
 
-ggplot(long_dt, aes(x = mean, y = algorithm, color = metric)) +
+ggplot(long_dt, aes(x = mean, y = learner_name, color = metric)) +
   geom_point(position = position_dodge(width = 0.5), size = 1) +
   geom_errorbarh(
     aes(xmin = mean - sd, xmax = mean + sd),
     position = position_dodge(width = 0.5),
     height = 0.25
   ) +
-  facet_grid(test.subset ~ train.subsets) +
+  facet_grid(test.subset ~ train.subsets+task_id) +
   labs(
-    title = " EMNIST,AUC mean ± SD by Algorithm (3 folds), imbalance ~ 0.1%",
+    title = " MNIST,AUC mean ± SD by Algorithm (3 folds)",
     x = "AUC",
     y = "Algorithm",
     color = "Metric"
   )
+history_dt <- rbindlist(lapply(1:nrow(best_lr_score_out), function(i) {
+  row <- best_lr_score_out[i]
+  learner <- row$learner[[1]]
+  hist <- learner$model
+  hist_dt <- as.data.table(hist)
+  hist_dt[, learner_name := row$learner_name]
+  hist_dt[, task_id := row$task_id]
+  hist_dt[, test.subset := row$test.subset]
+  hist_dt[, train.subsets := row$train.subsets]
+  hist_dt[, test.fold := row$test.fold]
+  return(hist_dt)
+}), fill = TRUE)
 
 
-
-
-
-
-(score_torch <- score_dt[
-  grepl("conv",learner_id)
-][
-  , best_epoch := sapply(
-    learner, function(L)unlist(L$tuning_result$internal_tuned_values))
-][])
-
-
-(history_torch <- score_torch[, {
-  L <- learner[[1]]
-  archive <- L$archive$data
-  best_row_idx <- which.max(archive$internal_valid_score)
-  M <- L$archive$learners(best_row_idx)[[1]]$model
-  M$torch_model_classif$model$callbacks$history
-}, by=.(learner_id, iteration)])
 (history_long <- nc::capture_melt_single(
-  history_torch,
+  history_dt,
   set=nc::alevels(valid="validation", train="subtrain"),
   ".",
   measure=nc::alevels("auc_macro", "auc_micro")))
-fwrite(history_long,"~/R-AUM_Multiclass/Learning_curves.csv")
+history_long[,task_id:= sub("MNIST_seed[12]_prop", "", task_id)]
+history_long[,learner_name:= sub("conv_", "", learner_name)]
 ggplot()+
   theme_bw()+
-  geom_vline(aes(
-    xintercept=best_epoch),
-    data=score_torch)+
   geom_line(aes(
     epoch, value, color=set),
     data=history_long[measure=="auc_macro"])+
-  facet_grid(learner_id~iteration, labeller=label_both)+
-  scale_x_continuous("epoch")
+  facet_grid(learner_name+train.subsets~task_id+test.subset+test.fold)+
+  scale_x_continuous("epoch")+
+
+fwrite(history_long,"~/R-AUM_Multiclass/Learning_curves.csv")
