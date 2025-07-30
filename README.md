@@ -1,4 +1,16 @@
 # Multi-class AUM for imbalanced datasets using R
+
+## Convolutional comparison on different imbalance ratios (30/07/2025): 
+<p align="center">
+  <img src="figure_conv_MNIST_results.png" alt="Description" width="600"/>
+</p>
+<p align="center">
+  <img src="conv_AUM_MNIST_results.png" alt="Description" width="600"/>
+</p>
+
+
+
+## Old results:
 I used [AUM_comparison.r](AUM_comparison.r) to train NNs on the cluster . I generated [score_conv_grid_search.csv](score_conv_grid_search.csv) which contains test results for CNNs using different loss functions
 
 <p align="center">
