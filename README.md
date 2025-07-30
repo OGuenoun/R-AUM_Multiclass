@@ -1,6 +1,14 @@
 # Multi-class AUM for imbalanced datasets using R
+## Convolutional comparison on FashionMNIST ( 30/07/2025):
+This looks promising . While looking onto LMs , I'll try to find complex datasets , add more epochs . 
+<p align="center">
+  <img src="figure_conv_FashionMNIST_AUM_results.png" alt="Description" width="600"/>
+</p>
+<p align="center">
+  <img src="figure_conv_learning_FashionMNIST.png" alt="Description" width="600"/>
+</p>
 
-## Convolutional comparison on different imbalance ratios (30/07/2025): 
+## Convolutional comparison on different imbalance ratios, MNIST (30/07/2025): 
 <p align="center">
   <img src="figure_conv_MNIST_results.png" alt="Description" width="600"/>
 </p>
