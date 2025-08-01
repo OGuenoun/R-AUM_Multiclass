@@ -4,7 +4,7 @@ library(data.table)
 
 ##Creating task 
 (SOAK <- mlr3resampling::ResamplingSameOtherSizesCV$new())
-unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/MNIST.csv")
+unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/FashionMNIST.csv")
 task.list <- list()
 data.csv <- sub("_unbalanced", "", unb.csv.vec)
 MNIST_dt <- fread(file=data.csv)
@@ -190,7 +190,7 @@ nn_AUM_macro_loss <- torch::nn_module(
   forward =Proposed_AUM_macro
 )
 n.pixels=28
-n.epochs<-300
+n.epochs<-1500
 make_torch_learner <- function(id,loss,lr){
   po_list <- c(
     list(
@@ -249,7 +249,7 @@ make_torch_learner <- function(id,loss,lr){
     store_models = TRUE
   )
 }
-lr_list=c(0.1,0.5,1)
+lr_list=c(0.01,0.1,0.5,1)
 learner.list<-c()
 for(lr in lr_list){
   learner.list<-c(learner.list,c(
@@ -271,7 +271,7 @@ for(lr in lr_list){
   learner.list,
   SOAK))
 
-reg.dir <- "2025-07-24-AUM"
+reg.dir <- "2025-07-24-Linear"
 cache.RData <- paste0(reg.dir,".RData")
 keep_history <- function(x){
   learners <- x$learner_state$model$marshaled$tuning_instance$archive$learners
@@ -296,7 +296,7 @@ if(file.exists(cache.RData)){
     job.table <- batchtools::getJobTable(reg=reg)
     chunks <- data.frame(job.table, chunk=1)
     batchtools::submitJobs(chunks, resources=list(
-      walltime = 4*60*60,#seconds
+      walltime = 6*60*60,#seconds
       memory = 16000,#megabytes per cpu
       ncpus=1,  #>1 for multicore/parallel jobs.
       ntasks=1, #>1 for MPI jobs.
@@ -325,7 +325,7 @@ score_out <- score_dt[, .(
 score_out[, lr := as.numeric(sub("lr([0-9.]+).*", "\\1", learner_id))]
 score_out[, learner_name := sub("lr[0-9.]+", "", learner_id)]
 best_lr_score_out=score_out[
-  , .SD[which.max(auc_macro)], by = .(learner_name,task_id,test.subset, train.subsets,test.fold)
+  , .SD[which.max(auc_macro)], by = .(learner_name,task_id,test.subset, train.subsets,test.fold,lr)
 ]
 
 
@@ -334,14 +334,16 @@ summary_dt <- best_lr_score_out[, .(
   sd_auc_micro = sd(auc_micro),
   mean_auc_macro = mean(auc_macro),
   sd_auc_macro = sd(auc_macro)
-), by = .(test.subset, train.subsets, learner_name,task_id)]
+), by = .(test.subset, train.subsets, learner_name,task_id,lr)]
+best_lr_summ=summary_dt[
+  , .SD[which.max(mean_auc_macro)], by = .(learner_name,task_id,test.subset,train.subsets)
+]
+fwrite(best_lr_summ,"~/R-AUM_Multiclass/FashionMNIST_conv_results_sameLr.csv")
 
-#fwrite(summary_dt,"~/R-AUM_Multiclass/conv_results.csv")
 
 
 
-
-long_dt <- melt(summary_dt,
+long_dt <- melt(best_lr_summ,
                 measure = patterns(mean = "^mean_auc", sd = "^sd_auc"),
                 variable.name = "metric",
 )
@@ -349,11 +351,11 @@ long_dt[, metric := factor(metric, labels = c("auc_micro", "auc_macro"))]
 
 long_dt[, test.subset := paste0("test = ", test.subset)]
 long_dt[, train.subsets := paste0("train = ", train.subsets)]
-long_dt[,task_id:= sub("MNIST_seed[12]_prop", "imbalance=", task_id)]
+long_dt[,task_id:= sub("FashionMNIST_seed[12]_prop", "imbalance=", task_id)]
 
 
 ggplot(long_dt, aes(x = mean, y = learner_name, color = metric)) +
-  geom_point(position = position_dodge(width = 0.5), size = 1) +
+  geom_point(position = position_dodge(width = 0.5), size) +
   geom_errorbarh(
     aes(xmin = mean - sd, xmax = mean + sd),
     position = position_dodge(width = 0.5),
@@ -361,7 +363,7 @@ ggplot(long_dt, aes(x = mean, y = learner_name, color = metric)) +
   ) +
   facet_grid(test.subset ~ train.subsets+task_id) +
   labs(
-    title = " MNIST,AUC mean ± SD by Algorithm (3 folds)",
+    title = " FashionMNIST,AUC mean ± SD by Algorithm (3 folds)",
     x = "AUC",
     y = "Algorithm",
     color = "Metric"
@@ -393,6 +395,6 @@ ggplot()+
     epoch, value, color=set),
     data=history_long[measure=="auc_macro"])+
   facet_grid(learner_name+train.subsets~task_id+test.subset+test.fold)+
-  scale_x_continuous("epoch")+
+  scale_x_continuous("epoch")
 
-fwrite(history_long,"~/R-AUM_Multiclass/Learning_curves.csv")
+#fwrite(history_long,"~/R-AUM_Multiclass/FashionMNIST_Learning_curves.csv")

@@ -6,7 +6,7 @@ unb_path="~/data_Classif_unbalanced/FashionMNIST.csv"
 MNIST_unb <- fread(unb_path)
 MNIST <-fread("~/data_Classif/FashionMNIST.csv")
 MNIST_unb[, (names(MNIST_unb)) := lapply(.SD, function(col) {
-  idx <- which(col == "" & MNIST$y != 0)
+  idx <- which(col == "" & MNIST$y != 0 & MNIST$y!=7)
   col[idx] <- "unbalanced"
   col
 })]
