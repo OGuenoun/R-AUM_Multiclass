@@ -256,7 +256,7 @@ for(lr in lr_list){
   learner.list,
   SOAK))
 
-reg.dir <- "~/links/scratch/2025-08-06-bynclasses"
+reg.dir <- "~/links/scratch/2025-08-05-linear"
 cache.RData <- paste0(reg.dir,".RData")
 keep_history <- function(x){
   learners <- x$learner_state$model$marshaled$tuning_instance$archive$learners
@@ -321,7 +321,7 @@ best_lr_summ=summary_dt[
   , .SD[which.max(mean_auc_macro)], by = .(learner_name,task_id,test.subset,train.subsets)
 ]
 
-fwrite(best_lr_summ,"~/R-AUM_Multiclass/conv_3_classes_FashionMNIST_results_sameLr.csv")
+#fwrite(best_lr_summ,"~/R-AUM_Multiclass/conv_3_classes_FashionMNIST_results_sameLr.csv")
 
 
 
@@ -411,7 +411,7 @@ ggplot() +
     train_time),
     data=time_dt) +
   facet_grid(~loss_function)+
-  labs(title = "Train time histogram", x = "Hours", y = "Number ") 
+  labs(title = "Train time histogram , 532 linear model", x = "Hours", y = "Number of models ") 
 
 
 #ROCs
