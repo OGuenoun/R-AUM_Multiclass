@@ -2,18 +2,18 @@
 ## Convolutional comparison on FashionMNIST ( 30/07/2025):
 This looks promising . While looking onto LMs , I'll try to find complex datasets , add more epochs . 
 <p align="center">
-  <img src="figure_conv_FashionMNIST_AUM_results.png" alt="Description" width="600"/>
+  <img src="AUC_results/figure_conv_FashionMNIST_AUM_results.png" alt="Description" width="600"/>
 </p>
 <p align="center">
-  <img src="figure_conv_learning_FashionMNIST.png" alt="Description" width="600"/>
+  <img src="Training_curves/figure_conv_learning_FashionMNIST.png" alt="Description" width="600"/>
 </p>
 
 ## Convolutional comparison on different imbalance ratios, MNIST (30/07/2025): 
 <p align="center">
-  <img src="figure_conv_MNIST_results.png" alt="Description" width="600"/>
+  <img src="AUC_results/figure_conv_MNIST_results.png" alt="Description" width="600"/>
 </p>
 <p align="center">
-  <img src="conv_AUM_MNIST_results.png" alt="Description" width="600"/>
+  <img src="AUC_results/conv_AUM_MNIST_results.png" alt="Description" width="600"/>
 </p>
 
 
@@ -22,10 +22,10 @@ This looks promising . While looking onto LMs , I'll try to find complex dataset
 I used [AUM_comparison.r](AUM_comparison.r) to train NNs on the cluster . I generated [score_conv_grid_search.csv](score_conv_grid_search.csv) which contains test results for CNNs using different loss functions
 
 <p align="center">
-  <img src="AUM_comparison_1percent.png" alt="Description" width="600"/>
+  <img src="AUC_results/AUM_comparison_1percent.png" alt="Description" width="600"/>
 </p>
 <p align="center">
-  <img src="AUM_comparison_0,1percent.png" alt="Description" width="600"/>
+  <img src="AUC_results/AUM_comparison_0,1percent.png" alt="Description" width="600"/>
 </p>
 
 ## Analysis
