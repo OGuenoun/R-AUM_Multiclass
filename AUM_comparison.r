@@ -12,7 +12,7 @@ subset_dt <- fread(unb.csv.vec)
 task_dt <- data.table(subset_dt, MNIST_dt)[, label := factor(y)]
 feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
 subset.name.vec <- names(subset_dt)
-subset.name.vec <- c("seed2_prop0.01","seed3_prop0.01","seed4_prop0.1")
+subset.name.vec <- c("seed1_prop0.01")
 (data.name <- gsub(".*/|[.]csv$", "", unb.csv.vec))
 for(subset.name in subset.name.vec){
   subset_vec <- task_dt[[subset.name]]
@@ -24,6 +24,8 @@ for(subset.name in subset.name.vec){
   itask$col_roles$feature <- feature.names
   task.list[[task_id]] <- itask
 }
+
+
 
 
 
@@ -139,24 +141,24 @@ aum_micro <- Micro_AUM$new()
 aum_macro<-Macro_AUM$new()
 measure_list <- c(auc_macro,auc_micro,aum_macro,aum_micro,mlr3::msr("classif.logloss"))
 ## END defining custom measures
-
+counts <- torch::torch_tensor(c(0.01,1,1,1,1,1,1,1,1,1))
+weights <- 1 / (counts + 1e-8)
+weights <- weights / weights$sum()
 ##Defining custom losses
-weighted_ce <- function(input,target) {
-  n_classes <- input$size(2)
-  counts <- torch::torch_bincount(target, minlength = n_classes)
-  
-  weights <- 1 / (counts + 1e-8)
-  weights <- weights / weights$sum()
-  
-  torch::nnf_cross_entropy(input,target, weight = weights)
-}
-nn_weighted_CE_loss <- torch::nn_module(
-  "nn_weighted_CE_loss",
+
+nn_weighted_ce_loss <- torch::nn_module(
+  "nn_weighted_ce_loss",
   inherit = torch::nn_mse_loss,
-  initialize = function() {
-    super$initialize()
-  },
-  forward =weighted_ce
+  public=list(
+    weights=weights,
+    initialize = function() {
+      super$initialize()
+    }
+  )
+  ,
+  forward = function(input, target) {
+    torch::nnf_cross_entropy(input, target, weight = self$weights)
+  }
 )
 nn_AUM_micro_loss <- torch::nn_module(
   "nn_AUM_micro_loss",
@@ -175,31 +177,14 @@ nn_AUM_macro_loss <- torch::nn_module(
   forward =Proposed_AUM_macro
 )
 n.pixels=28
-n.epochs<-3000
-make_torch_learner <- function(id,loss,lr){
+make_torch_learner <- function(id,loss,lr,batch_sz){
+  n.epochs<-batch_sz/2
   po_list <- c(
     list(
       mlr3pipelines::po(
         "select",
         selector = mlr3pipelines::selector_type(c("numeric", "integer"))),
       mlr3torch::PipeOpTorchIngressNumeric$new()),
-    list(
-      mlr3pipelines::po(
-        "nn_reshape",
-        shape=c(-1,1,n.pixels,n.pixels)),
-      mlr3pipelines::po(
-        "nn_conv2d_1",
-        out_channels = 20,
-        kernel_size = 6),
-      mlr3pipelines::po("nn_relu_1", inplace = TRUE),
-      mlr3pipelines::po(
-        "nn_max_pool2d_1",
-        kernel_size = 4),
-      mlr3pipelines::po("nn_flatten"),
-      mlr3pipelines::po(
-        "nn_linear",
-        out_features = 50),
-      mlr3pipelines::po("nn_relu_2", inplace = TRUE)),
     list(
       mlr3torch::nn("linear", out_features=10),
       mlr3pipelines::po("nn_head"),
@@ -214,7 +199,7 @@ make_torch_learner <- function(id,loss,lr){
         mlr3torch::t_clbk("history")),
       mlr3pipelines::po(
         "torch_model_classif",
-        batch_size = 100000,
+        batch_size = batch_sz,
         patience=n.epochs,
         measures_valid=measure_list,
         measures_train=measure_list,
@@ -234,16 +219,38 @@ make_torch_learner <- function(id,loss,lr){
     store_models = TRUE
   )
 }
-lr_list=c(0.01,0.1,1)
+if(FALSE){
+  pred_logits <- torch_tensor(matrix(
+    c( 1.2, -0.3,  0.1,
+       -0.8,  0.4,  1.1,
+       0.2,  0.1, -0.5,
+       2.0, -1.0,  0.0,
+       -0.2,  1.4,  0.3,
+       0.1, -0.2,  0.0,
+       -1.2,  0.3,  1.0,
+       0.0,  0.0,  0.0),
+    ncol = 3, byrow = TRUE))
+  
+  pred_probs <- torch::nnf_softmax(pred_logits, dim = 2)  
+  
+  labels <- torch_tensor(c(1, 3, 1, 1, 1, 1, 3, 3), dtype = torch_long())
+  auc <- ROC_AUC_macro(pred_probs,labels)
+}
+lr_list=c(0.1,0.3,1)
+batches_lis=c(10,100,1000)
 learner.list<-c()
 for(lr in lr_list){
-  learner.list<-c(learner.list,c(
-    make_torch_learner(paste0("lr",lr,"conv_CE_unweighted"),torch::nn_cross_entropy_loss,lr),
-    make_torch_learner(paste0("lr",lr,"conv_Macro_AUM"),nn_AUM_macro_loss,lr),
-    make_torch_learner(paste0("lr",lr,"conv_Micro_AUM"),nn_AUM_micro_loss,lr),
-    make_torch_learner(paste0("lr",lr,"conv_CE_weighted"),nn_weighted_CE_loss,lr))
-  )
+  for(batch in batches_lis){
+    learner.list<-c(learner.list,c(
+      make_torch_learner(paste0("lr",lr,"linear_CE_unweighted_","batch_",batch),torch::nn_cross_entropy_loss,lr,batch),
+      make_torch_learner(paste0("lr",lr,"linear_Macro_AUM_","batch_",batch),nn_AUM_macro_loss,lr,batch),
+      make_torch_learner(paste0("lr",lr,"linear_Micro_AUM_","batch_",batch),nn_AUM_micro_loss,lr,batch),
+      make_torch_learner(paste0("lr",lr,"linear_CE_weighted_","batch_",batch),nn_weighted_ce_loss,lr,batch))
+    )
+  }
+  
 }
+
 ### END defining custom losses
 
 
@@ -256,7 +263,7 @@ for(lr in lr_list){
   learner.list,
   SOAK))
 
-reg.dir <- "~/links/scratch/2025-08-05-linear"
+reg.dir <- "~/links/scratch/2025-08-12-batches-linear"
 cache.RData <- paste0(reg.dir,".RData")
 keep_history <- function(x){
   learners <- x$learner_state$model$marshaled$tuning_instance$archive$learners
@@ -281,8 +288,8 @@ if(file.exists(cache.RData)){
     job.table <- batchtools::getJobTable(reg=reg)
     chunks <- data.frame(job.table, chunk=1)
     batchtools::submitJobs(chunks, resources=list(
-      walltime = 14*60*60,#seconds
-      memory = 28000,#megabytes per cpu
+      walltime = 5*60*60,#seconds
+      memory = 15000,#megabytes per cpu
       ncpus=1,  #>1 for multicore/parallel jobs.
       ntasks=1, #>1 for MPI jobs.
       chunks.as.arrayjobs=TRUE), reg=reg)
@@ -309,6 +316,7 @@ score_out <- score_dt[, .(
   task_id, test.subset, train.subsets, test.fold, learner_id, auc_micro,auc_macro,learner,iteration)]
 score_out[, lr := as.numeric(sub("lr([0-9.]+).*", "\\1", learner_id))]
 score_out[, learner_name := sub("lr[0-9.]+", "", learner_id)]
+score_out[,batch_size:=sub(".*batch_([0-9]+)", "batch_size=\\1", learner_id)]
 
 
 summary_dt <- score_out[, .(
@@ -316,15 +324,16 @@ summary_dt <- score_out[, .(
   sd_auc_micro = sd(auc_micro),
   mean_auc_macro = mean(auc_macro),
   sd_auc_macro = sd(auc_macro)
-), by = .(test.subset, train.subsets, learner_name,task_id,lr)]
+), by = .(test.subset, train.subsets, learner_name,task_id,lr,batch_size)]
 best_lr_summ=summary_dt[
-  , .SD[which.max(mean_auc_macro)], by = .(learner_name,task_id,test.subset,train.subsets)
+  , .SD[which.max(mean_auc_macro)], by = .(learner_name,task_id,test.subset,train.subsets,batch_size)
 ]
 
-#fwrite(best_lr_summ,"~/R-AUM_Multiclass/conv_3_classes_FashionMNIST_results_sameLr.csv")
+fwrite(best_lr_summ,"~/R-AUM_Multiclass/AUC_results/Fashion_subclasses_linear.csv")
 
 
-
+best_lr_conv=fread("~/R-AUM_Multiclass/AUC_results/Fashion_subclasses_conv.csv")
+all_best_lr_summ=rbind(best_lr_summ,best_lr_conv)
 
 long_dt <- melt(best_lr_summ,
                 measure = patterns(mean = "^mean_auc", sd = "^sd_auc"),
@@ -334,8 +343,8 @@ long_dt[, metric := factor(metric, labels = c("auc_micro", "auc_macro"))]
 
 long_dt[, test.subset := paste0("test = ", test.subset)]
 long_dt[, train.subsets := paste0("train = ", train.subsets)]
-long_dt[,task_id:= sub("FashionMNIST_seed[12]_prop", "imbalance=", task_id)]
-
+long_dt[,task_id:= sub("FashionMNIST_seed([1234])_prop0.01", "subsampled_classes=\\1", task_id)]
+long_dt[,learner_name:= sub("_batch_[0-9]+", "", learner_name)]
 
 ggplot(long_dt, aes(x = mean, y = learner_name, color = metric)) +
   geom_point(position = position_dodge(width = 0.5)) +
@@ -344,9 +353,9 @@ ggplot(long_dt, aes(x = mean, y = learner_name, color = metric)) +
     position = position_dodge(width = 0.5),
     height = 0.25
   ) +
-  facet_grid(test.subset ~ train.subsets+task_id) +
+  facet_grid(test.subset ~ train.subsets+batch_size) +
   labs(
-    title = " FashionMNIST,AUC mean ± SD by Algorithm (3 folds)",
+    title = " FashionMNIST,imbalance = 1% ,AUC mean ± SD by Algorithm (3 folds)",
     x = "AUC",
     y = "Algorithm",
     color = "Metric"
