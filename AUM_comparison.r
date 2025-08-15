@@ -185,6 +185,22 @@ make_torch_learner <- function(id,loss,lr,batch_sz){
         "select",
         selector = mlr3pipelines::selector_type(c("numeric", "integer"))),
       mlr3torch::PipeOpTorchIngressNumeric$new()),
+    list(mlr3pipelines::po(
+      "nn_reshape",
+      shape=c(-1,1,n.pixels,n.pixels)),
+      mlr3pipelines::po(
+        "nn_conv2d_1",
+        out_channels = 20,
+        kernel_size = 6),
+      mlr3pipelines::po("nn_relu_1", inplace = TRUE),
+      mlr3pipelines::po(
+        "nn_max_pool2d_1",
+        kernel_size = 4),
+      mlr3pipelines::po("nn_flatten"),
+      mlr3pipelines::po(
+        "nn_linear",
+        out_features = 50),
+      mlr3pipelines::po("nn_relu_2", inplace = TRUE)),
     list(
       mlr3torch::nn("linear", out_features=10),
       mlr3pipelines::po("nn_head"),
@@ -236,7 +252,7 @@ if(FALSE){
   labels <- torch_tensor(c(1, 3, 1, 1, 1, 1, 3, 3), dtype = torch_long())
   auc <- ROC_AUC_macro(pred_probs,labels)
 }
-lr_list=c(0.1,0.3,1)
+lr_list=c(0.01,0.1,1)
 batches_lis=c(10,100,1000)
 learner.list<-c()
 for(lr in lr_list){
@@ -263,7 +279,7 @@ for(lr in lr_list){
   learner.list,
   SOAK))
 
-reg.dir <- "~/links/scratch/2025-08-12-batches-linear"
+reg.dir <- "~/links/scratch/2025-08-06-bynclasses-linear"
 cache.RData <- paste0(reg.dir,".RData")
 keep_history <- function(x){
   learners <- x$learner_state$model$marshaled$tuning_instance$archive$learners
@@ -316,7 +332,7 @@ score_out <- score_dt[, .(
   task_id, test.subset, train.subsets, test.fold, learner_id, auc_micro,auc_macro,learner,iteration)]
 score_out[, lr := as.numeric(sub("lr([0-9.]+).*", "\\1", learner_id))]
 score_out[, learner_name := sub("lr[0-9.]+", "", learner_id)]
-score_out[,batch_size:=sub(".*batch_([0-9]+)", "batch_size=\\1", learner_id)]
+#score_out[,batch_size:=sub(".*batch_([0-9]+)", "batch_size=\\1", learner_id)]
 
 
 summary_dt <- score_out[, .(
@@ -329,7 +345,7 @@ best_lr_summ=summary_dt[
   , .SD[which.max(mean_auc_macro)], by = .(learner_name,task_id,test.subset,train.subsets,batch_size)
 ]
 
-fwrite(best_lr_summ,"~/R-AUM_Multiclass/AUC_results/Fashion_subclasses_linear.csv")
+#fwrite(best_lr_summ,"~/R-AUM_Multiclass/AUC_results/Fashion_subclasses_linear.csv")
 
 
 best_lr_conv=fread("~/R-AUM_Multiclass/AUC_results/Fashion_subclasses_conv.csv")
