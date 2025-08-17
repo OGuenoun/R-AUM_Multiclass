@@ -458,7 +458,7 @@ ggplot(roc_micro_dt, aes(x = FPR , y = TPR)) +
 
 roc_macro=ROC_curve_macro(pred_tensor,label_tensor)
 
-fpr_mat <- torch::as_array(roc_macro[[1]])  # matrix of shape [N, 10]
+fpr_mat <- torch::as_array(roc_macro[[1]])  
 tpr_mat <- torch::as_array(roc_macro[[3]])
 n_classes <- dim(fpr_mat)[2]
 n_points <- dim(fpr_mat)[1]
@@ -472,6 +472,8 @@ ggplot(roc_dt_macro, aes(x = fpr, y = tpr, color = factor(class))) +
   geom_line() +
   labs(title = "ROC Curves (One-vs-Rest)", x = "FPR", y = "TPR", color = "Class") +
   theme_minimal()
+
+  
 ##Scatter plot , first one : AUC micro
 best_lr_out=score_out[
   , .SD[which.max(auc_macro)], by = .(learner_name,task_id,test.subset,train.subsets,iteration)
@@ -479,7 +481,7 @@ best_lr_out=score_out[
 best_lr_aum <- best_lr_out[learner_name %like% "AUM", .(learner_name, auc_micro,auc_macro,iteration,test.fold,test.subset,train.subsets,task_id)]
 macro <- best_lr_aum[learner_name=="linear_Macro_AUM",
                      .(iteration, test.fold, test.subset, train.subsets,
-                       auc_micro_macroAUM =auc_micro),    # use mean if duplicates
+                       auc_micro_macroAUM =auc_micro), 
                      by=.(iteration, test.fold, test.subset, train.subsets,task_id)]
 
 micro <- best_lr_aum[learner_name=="linear_Micro_AUM",
@@ -487,6 +489,7 @@ micro <- best_lr_aum[learner_name=="linear_Micro_AUM",
                        auc_micro_microAUM = auc_micro,task_id),
                      by=.(iteration, test.fold, test.subset, train.subsets)]
 comp <- macro[micro, on=.(iteration, test.fold, test.subset, train.subsets,task_id)]
+  
 ggplot(comp, aes(x = auc_micro_microAUM , y = auc_micro_macroAUM)) +
   geom_point()+
   geom_abline(intercept = 0, slope = 1, color = "blue")+ 
