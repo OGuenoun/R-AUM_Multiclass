@@ -12,7 +12,7 @@ subset_dt <- fread(unb.csv.vec)
 task_dt <- data.table(subset_dt, MNIST_dt)[, label := factor(y)]
 feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
 subset.name.vec <- names(subset_dt)
-subset.name.vec <- c("seed1_prop0.01")
+subset.name.vec <- c("seed1_prop0.001")
 (data.name <- gsub(".*/|[.]csv$", "", unb.csv.vec))
 for(subset.name in subset.name.vec){
   subset_vec <- task_dt[[subset.name]]
@@ -141,7 +141,7 @@ aum_micro <- Micro_AUM$new()
 aum_macro<-Macro_AUM$new()
 measure_list <- c(auc_macro,auc_micro,aum_macro,aum_micro,mlr3::msr("classif.logloss"))
 ## END defining custom measures
-counts <- torch::torch_tensor(c(0.01,1,1,1,1,1,1,1,1,1))
+counts <- torch::torch_tensor(c(0.001,1,1,1,1,1,1,1,1,1))
 weights <- 1 / (counts + 1e-8)
 weights <- weights / weights$sum()
 ##Defining custom losses
@@ -178,7 +178,7 @@ nn_AUM_macro_loss <- torch::nn_module(
 )
 n.pixels=28
 make_torch_learner <- function(id,loss,lr,batch_sz){
-  n.epochs<-batch_sz/2
+  n.epochs<-batch_sz*2
   po_list <- c(
     list(
       mlr3pipelines::po(
@@ -279,7 +279,7 @@ for(lr in lr_list){
   learner.list,
   SOAK))
 
-reg.dir <- "~/links/scratch/2025-08-06-bynclasses-linear"
+reg.dir <- "~/links/scratch/2025-08-06-batches"
 cache.RData <- paste0(reg.dir,".RData")
 keep_history <- function(x){
   learners <- x$learner_state$model$marshaled$tuning_instance$archive$learners
@@ -304,8 +304,8 @@ if(file.exists(cache.RData)){
     job.table <- batchtools::getJobTable(reg=reg)
     chunks <- data.frame(job.table, chunk=1)
     batchtools::submitJobs(chunks, resources=list(
-      walltime = 5*60*60,#seconds
-      memory = 15000,#megabytes per cpu
+      walltime = 10*60*60,#seconds
+      memory = 20000,#megabytes per cpu
       ncpus=1,  #>1 for multicore/parallel jobs.
       ntasks=1, #>1 for MPI jobs.
       chunks.as.arrayjobs=TRUE), reg=reg)
@@ -431,12 +431,9 @@ time_dt[, loss_function := fifelse(
           fifelse(grepl("CE_weighted", learner_name), "CE_weighted",
                   fifelse(grepl("CE_unweighted", learner_name), "CE_unweighted", NA_character_)
           )))]
-ggplot() +
-  geom_histogram(aes(
-    train_time),
-    data=time_dt) +
-  facet_grid(~loss_function)+
-  labs(title = "Train time histogram , 532 linear model", x = "Hours", y = "Number of models ") 
+time_dt_lighter=time_dt[,.(learner_name,lr,train_time,loss_function,task_id)]
+#fwrite(time_dt_lighter,"~/R-AUM_Multiclass/Training_Histo/time_linear_bynclasses_1500ep.csv")
+
 
 
 #ROCs
@@ -472,21 +469,38 @@ ggplot(roc_dt_macro, aes(x = fpr, y = tpr, color = factor(class))) +
   geom_line() +
   labs(title = "ROC Curves (One-vs-Rest)", x = "FPR", y = "TPR", color = "Class") +
   theme_minimal()
+<<<<<<< HEAD
+=======
+<<<<<<< Updated upstream
+=======
+>>>>>>> 911ca2e (weighted micro and covertype dataset)
 
   
 ##Scatter plot , first one : AUC micro
 best_lr_out=score_out[
+<<<<<<< HEAD
   , .SD[which.max(auc_macro)], by = .(learner_name,task_id,test.subset,train.subsets,iteration)
+=======
+  , .SD[which.max(auc_micro)], by = .(learner_name,task_id,test.subset,train.subsets,iteration)
+>>>>>>> 911ca2e (weighted micro and covertype dataset)
 ]
 best_lr_aum <- best_lr_out[learner_name %like% "AUM", .(learner_name, auc_micro,auc_macro,iteration,test.fold,test.subset,train.subsets,task_id)]
 macro <- best_lr_aum[learner_name=="linear_Macro_AUM",
                      .(iteration, test.fold, test.subset, train.subsets,
+<<<<<<< HEAD
                        auc_micro_macroAUM =auc_micro), 
+=======
+                       auc_micro_macroAUM =auc_macro), 
+>>>>>>> 911ca2e (weighted micro and covertype dataset)
                      by=.(iteration, test.fold, test.subset, train.subsets,task_id)]
 
 micro <- best_lr_aum[learner_name=="linear_Micro_AUM",
                      .(iteration, test.fold, test.subset, train.subsets,
+<<<<<<< HEAD
                        auc_micro_microAUM = auc_micro,task_id),
+=======
+                       auc_micro_microAUM = auc_macro,task_id),
+>>>>>>> 911ca2e (weighted micro and covertype dataset)
                      by=.(iteration, test.fold, test.subset, train.subsets)]
 comp <- macro[micro, on=.(iteration, test.fold, test.subset, train.subsets,task_id)]
   
@@ -494,10 +508,18 @@ ggplot(comp, aes(x = auc_micro_microAUM , y = auc_micro_macroAUM)) +
   geom_point()+
   geom_abline(intercept = 0, slope = 1, color = "blue")+ 
   labs(
+<<<<<<< HEAD
     title = " AUC micro values",
+=======
+    title = " AUC macro values",
+>>>>>>> 911ca2e (weighted micro and covertype dataset)
     x = "Training on micro AUM",
     y = "Training on macro AUM",
   )+
   xlim(0.5,1)+
   ylim(0.5,1)+
   coord_equal()
+<<<<<<< HEAD
+=======
+>>>>>>> Stashed changes
+>>>>>>> 911ca2e (weighted micro and covertype dataset)
