@@ -198,7 +198,7 @@ ROC_AUC_macro<-function(pred_tensor,label_tensor){
 Proposed_AUM_micro_weighted<-function(pred_tensor,label_tensor){
   n_class=pred_tensor$size(2)
   N=pred_tensor$size(1)
-  counts <- torch::torch_bincount(target, minlength = n_classes)
+  counts <- torch::torch_bincount(label_tensor, minlength = n_class)
   Pweights <- 1 / (counts + 1e-8)
   Pweights <- Pweights / Pweights$sum()
   Nweights <-1/(N-counts+1e-8)
@@ -237,4 +237,15 @@ Proposed_AUM_micro_weighted<-function(pred_tensor,label_tensor){
   constant_diff = roc$min_constant[2:N]$diff()
   return(torch::torch_sum(min_FPR_FNR * constant_diff))
 }
+four_labels <- torch::torch_tensor(c(1, 3, 2, 2), dtype = torch::torch_long())
 
+# Predictions
+four_pred <- torch::torch_tensor(matrix(
+  c(0.4, 0.3, 0.3,
+    0.2, 0.1, 0.7,
+    0.5, 0.2, 0.3,
+    0.3, 0.4, 0.3),
+  nrow = 4, ncol = 3,
+  byrow = TRUE
+))
+(Proposed_AUM_micro_weighted(four_pred,four_labels))
