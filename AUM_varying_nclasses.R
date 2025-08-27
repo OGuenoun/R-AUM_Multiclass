@@ -503,14 +503,15 @@ pred_micro_dt[ ,loss := "micro_aum"]
 pred_aum=rbind(pred_macro_dt,pred_micro_dt)
 
 setnames(pred_aum, old = "V1", new = "label")
+pred_aum[, label := paste0("true class=", label)]
 fwrite(pred_aum,"~/R-AUM_Multiclass/scores_issue/AUM_pred_scores.csv")
 long_pred_dt <- melt(
   pred_aum,
   measure.vars = c("0", "1", "2"),
-  variable.name = "class",
+  variable.name = "prediction_for_class",
   value.name = "Value"
 )
-ggplot(long_pred_dt, aes(x = Value, color=class)) +
+ggplot(long_pred_dt, aes(x = Value, color=prediction_for_class)) +
   geom_histogram( position = "identity", bins = 30) +
   labs(title = "Histograms of predictions from models optimized on AUM",
        x = "Value",
