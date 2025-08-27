@@ -512,7 +512,7 @@ long_pred_dt <- melt(
 )
 ggplot(long_pred_dt, aes(x = Value, color=class)) +
   geom_histogram( position = "identity", bins = 30) +
-  labs(title = "Histograms of predictions from models optimized on",
+  labs(title = "Histograms of predictions from models optimized on AUM",
        x = "Value",
        y = "Count") +
   facet_grid(label ~ loss)
