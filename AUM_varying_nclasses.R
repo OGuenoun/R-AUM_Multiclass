@@ -492,9 +492,9 @@ ggplot(long_sub, aes(x = mean, y = learner_name)) +
 
 #ROCs
 score_dt <- mlr3resampling::score(bench.result, c(auc_macro,auc_micro))
-best_row_macro <- score_dt[grepl("Macro_AUM", learner_id)& grepl("_3", learner_id)][which.max(auc_macro)]
+best_row_macro <- score_dt[grepl("Macro_AUM", learner_id)& grepl("_3", learner_id) & test.subset=="balanced" & train.subsets=="same"][which.max(auc_macro)]
 predictions_macro= best_row_macro$prediction_test[[1]]
-best_row_micro <- score_dt[grepl("Micro_AUM", learner_id)& grepl("_3", learner_id)][which.max(auc_macro)]
+best_row_micro <- score_dt[grepl("Micro_AUM", learner_id)& grepl("_3", learner_id) & test.subset=="balanced" & train.subsets=="same"][which.max(auc_macro)]
 predictions_micro= best_row_micro$prediction_test[[1]]
 pred_macro_dt=data.table(predictions_macro$truth,predictions_macro$prob)
 pred_macro_dt[ ,loss := "macro_aum"]
@@ -503,7 +503,7 @@ pred_micro_dt[ ,loss := "micro_aum"]
 pred_aum=rbind(pred_macro_dt,pred_micro_dt)
 
 setnames(pred_aum, old = "V1", new = "label")
-fwrite(pred_aum,"~/R-AUM_Multiclass/thresholds_Issue/AUM_pred_scores.csv")
+fwrite(pred_aum,"~/R-AUM_Multiclass/scores_issue/AUM_pred_scores.csv")
 long_pred_dt <- melt(
   pred_aum,
   measure.vars = c("0", "1", "2"),
@@ -512,7 +512,7 @@ long_pred_dt <- melt(
 )
 ggplot(long_pred_dt, aes(x = Value, color=class)) +
   geom_histogram( position = "identity", bins = 30) +
-  labs(title = "Histograms of Metrics",
+  labs(title = "Histograms of predictions from models optimized on",
        x = "Value",
        y = "Count") +
-  facet_grid(~loss)
+  facet_grid(label ~ loss)
