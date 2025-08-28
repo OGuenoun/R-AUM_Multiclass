@@ -1,7 +1,7 @@
 library(data.table)
 
-poker_test <- fread("~/poker_train.csv")
-poker_train  <- fread("~/poker_test.csv")
+poker_test <- fread("~/poker_test.csv")
+poker_train  <- fread("~/poker_train.csv")
 colnames(poker_train) <- colnames(poker_test) <- c(
   "S1","R1",
   "S2","R2",
@@ -297,7 +297,7 @@ if(file.exists(cache.RData)){
     chunks <- data.frame(job.table, chunk=1)
     batchtools::submitJobs(chunks, resources=list(
       walltime = 10*60*60,#seconds
-      memory = 20000,#megabytes per cpu
+      memory = 16000,#megabytes per cpu
       ncpus=1,  #>1 for multicore/parallel jobs.
       ntasks=1, #>1 for MPI jobs.
       chunks.as.arrayjobs=TRUE), reg=reg)

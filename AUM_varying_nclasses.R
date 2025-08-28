@@ -496,24 +496,28 @@ best_row_macro <- score_dt[grepl("Macro_AUM", learner_id)& grepl("_3", learner_i
 predictions_macro= best_row_macro$prediction_test[[1]]
 best_row_micro <- score_dt[grepl("Micro_AUM", learner_id)& grepl("_3", learner_id) & test.subset=="balanced" & train.subsets=="same"][which.max(auc_macro)]
 predictions_micro= best_row_micro$prediction_test[[1]]
+best_row_ce <- score_dt[grepl("CE_weighted", learner_id)& grepl("_3", learner_id) & test.subset=="balanced" & train.subsets=="same"][which.max(auc_macro)]
+predictions_ce_weighted= best_row_ce$prediction_test[[1]]
 pred_macro_dt=data.table(predictions_macro$truth,predictions_macro$prob)
 pred_macro_dt[ ,loss := "macro_aum"]
 pred_micro_dt=data.table(predictions_micro$truth,predictions_micro$prob)
 pred_micro_dt[ ,loss := "micro_aum"]
-pred_aum=rbind(pred_macro_dt,pred_micro_dt)
+pred_ce_dt=data.table(predictions_ce_weighted$truth,predictions_ce_weighted$prob)
+pred_ce_dt[ ,loss := "cross-entropy weighted"]
+pred_loss=rbind(pred_macro_dt,pred_micro_dt,pred_ce_dt)
 
-setnames(pred_aum, old = "V1", new = "label")
-pred_aum[, label := paste0("true class=", label)]
+setnames(pred_loss, old = "V1", new = "label")
+pred_loss[, label := paste0("true class=", label)]
 fwrite(pred_aum,"~/R-AUM_Multiclass/scores_issue/AUM_pred_scores.csv")
 long_pred_dt <- melt(
-  pred_aum,
+  pred_loss,
   measure.vars = c("0", "1", "2"),
   variable.name = "prediction_for_class",
   value.name = "Value"
 )
 ggplot(long_pred_dt, aes(x = Value, color=prediction_for_class)) +
   geom_histogram( position = "identity", bins = 30) +
-  labs(title = "Histograms of predictions from models optimized on AUM",
+  labs(title = "Histograms of predictions from models optimized on different loss functions",
        x = "Value",
        y = "Count") +
-  facet_grid(label ~ loss)
+  facet_grid(label ~ loss,scales = "free")

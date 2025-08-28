@@ -9,17 +9,17 @@ task.list <- list()
 data.csv <- sub("_unbalanced", "3", unb.csv.vec)
 MNIST_dt <- fread(file=data.csv)
 subset_dt <- fread(unb.csv.vec) 
-task_dt <- data.table(subset_dt, MNIST_dt)[, label := factor(class3)]
+task_dt <- data.table(subset_dt, MNIST_dt)[, odd := factor(y %% 2)]
 feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
 subset.name.vec <- names(subset_dt)
-subset.name.vec <- c("seed3_prop0.001","seed3_prop0.01")
+subset.name.vec <- c("seed5_prop0.001")
 (data.name <- gsub(".*/|[.]csv$", "", unb.csv.vec))
 for(subset.name in subset.name.vec){
   subset_vec <- task_dt[[subset.name]]
   task_id <- paste0(data.name,"_",subset.name)
   itask <- mlr3::TaskClassif$new(
-    task_id, task_dt[subset_vec != ""], target="label")
-  itask$col_roles$stratum <- c("label", subset.name)
+    task_id, task_dt[subset_vec != ""], target="odd")
+  itask$col_roles$stratum <- c("y", subset.name)
   itask$col_roles$subset <- subset.name
   itask$col_roles$feature <- feature.names
   task.list[[task_id]] <- itask
@@ -189,7 +189,7 @@ nn_AUM_macro_loss <- torch::nn_module(
   forward =Proposed_AUM_macro
 )
 n.pixels=28
-n.epochs=3000
+n.epochs=500
 make_torch_learner <- function(id,loss,lr){
   po_list <- c(
     list(
@@ -197,24 +197,8 @@ make_torch_learner <- function(id,loss,lr){
         "select",
         selector = mlr3pipelines::selector_type(c("numeric", "integer"))),
       mlr3torch::PipeOpTorchIngressNumeric$new()),
-    list(mlr3pipelines::po(
-      "nn_reshape",
-      shape=c(-1,1,n.pixels,n.pixels)),
-      mlr3pipelines::po(
-        "nn_conv2d_1",
-        out_channels = 20,
-        kernel_size = 6),
-      mlr3pipelines::po("nn_relu_1", inplace = TRUE),
-      mlr3pipelines::po(
-        "nn_max_pool2d_1",
-        kernel_size = 4),
-      mlr3pipelines::po("nn_flatten"),
-      mlr3pipelines::po(
-        "nn_linear",
-        out_features = 50),
-      mlr3pipelines::po("nn_relu_2", inplace = TRUE)),
     list(
-      mlr3torch::nn("linear", out_features=3),
+      mlr3torch::nn("linear", out_features=1),
       mlr3pipelines::po("nn_head"),
       mlr3pipelines::po(
         "torch_loss",
@@ -265,7 +249,6 @@ if(FALSE){
   auc <- ROC_AUC_macro(pred_probs,labels)
 }
 lr_list=c(0.001,0.01,0.1)
-batches_lis=c(10,100,1000)
 learner.list<-c()
 for(lr in lr_list){
     learner.list<-c(learner.list,c(
@@ -290,7 +273,7 @@ for(lr in lr_list){
   learner.list,
   SOAK))
 
-reg.dir <- "~/links/scratch/2025-08-20-weighted-conv"
+reg.dir <- "~/links/scratch/2025-08-28-2classes"
 cache.RData <- paste0(reg.dir,".RData")
 keep_history <- function(x){
   learners <- x$learner_state$model$marshaled$tuning_instance$archive$learners
@@ -315,8 +298,8 @@ if(file.exists(cache.RData)){
     job.table <- batchtools::getJobTable(reg=reg)
     chunks <- data.frame(job.table, chunk=1)
     batchtools::submitJobs(chunks, resources=list(
-      walltime = 14*60*60,#seconds
-      memory = 20000,#megabytes per cpu
+      walltime = 7*60*60,#seconds
+      memory = 16000,#megabytes per cpu
       ncpus=1,  #>1 for multicore/parallel jobs.
       ntasks=1, #>1 for MPI jobs.
       chunks.as.arrayjobs=TRUE), reg=reg)
