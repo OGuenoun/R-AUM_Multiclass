@@ -9,26 +9,24 @@ task.list <- list()
 data.csv <- sub("_unbalanced", "3", unb.csv.vec)
 MNIST_dt <- fread(file=data.csv)
 subset_dt <- fread(unb.csv.vec) 
-task_dt <- data.table(subset_dt, MNIST_dt)[, odd := factor(y %% 2)]
+task_dt <- data.table(subset_dt, MNIST_dt)[,  odd := factor(
+  ifelse(y %% 2, "odd", "even"),
+  c("odd", "even") 
+)]
 feature.names <- grep("^[0-9]+$", names(task_dt), value=TRUE)
 subset.name.vec <- names(subset_dt)
-subset.name.vec <- c("seed5_prop0.001")
+subset.name.vec <- c("seed5_prop0.01")
 (data.name <- gsub(".*/|[.]csv$", "", unb.csv.vec))
 for(subset.name in subset.name.vec){
   subset_vec <- task_dt[[subset.name]]
   task_id <- paste0(data.name,"_",subset.name)
   itask <- mlr3::TaskClassif$new(
     task_id, task_dt[subset_vec != ""], target="odd")
-  itask$col_roles$stratum <- c("y", subset.name)
+  itask$col_roles$stratum <- c("y",subset.name)
   itask$col_roles$subset <- subset.name
   itask$col_roles$feature <- feature.names
   task.list[[task_id]] <- itask
 }
-
-
-
-
-
 
 ####keeping only same and other
 SOAK$param_set$values$subsets <- "SO"
@@ -43,7 +41,7 @@ Micro_AUC = R6::R6Class("Micro_AUC",
                               id = "auc_micro",
                               packages = "torch",
                               properties = character(),
-                              task_properties = "multiclass",
+                              task_properties = "twoclass",
                               predict_type = "prob",
                               range = c(0, 1),
                               minimize = FALSE
@@ -69,7 +67,7 @@ Macro_AUC = R6::R6Class("Macro_AUC",
                               id = "auc_macro",
                               packages = "torch",
                               properties = character(),
-                              task_properties = "multiclass",
+                              task_properties = "twoclass",
                               predict_type = "prob",
                               range = c(0, 1),
                               minimize = FALSE
@@ -94,9 +92,9 @@ Micro_AUM = R6::R6Class("Macro_AUC",
                               id = "aum_micro",
                               packages = "torch",
                               properties = character(),
-                              task_properties = "multiclass",
+                              task_properties = "twoclass",
                               predict_type = "prob",
-                              range = c(0, 1),
+                              range = c(0, Inf),
                               minimize = FALSE
                             )
                           }
@@ -119,9 +117,9 @@ Macro_AUM = R6::R6Class("Macro_AUC",
                               id = "aum_macro",
                               packages = "torch",
                               properties = character(),
-                              task_properties = "multiclass",
+                              task_properties = "twoclass",
                               predict_type = "prob",
-                              range = c(0, 1),
+                              range = c(0, Inf),
                               minimize = FALSE
                             )
                           }
@@ -143,13 +141,12 @@ measure_list <- c(auc_macro,auc_micro,aum_macro,aum_micro,mlr3::msr("classif.log
 ## END defining custom measures
 ##Defining custom losses
 weighted_ce <- function(input,target) {
-  n_classes <- input$size(2)
-  counts <- torch::torch_bincount(target, minlength = n_classes)
+  counts <- torch::torch_bincount(target, minlength = 2)
   
   weights <- 1 / (counts + 1e-8)
   weights <- weights / weights$sum()
   
-  torch::nnf_cross_entropy(input,target, weight = weights)
+  torch::nnf_binary_cross_entropy_with_logits(input,target, weight = weights)
 }
 
 nn_weighted_ce_loss <- torch::nn_module(
@@ -252,11 +249,11 @@ lr_list=c(0.001,0.01,0.1)
 learner.list<-c()
 for(lr in lr_list){
     learner.list<-c(learner.list,c(
-      make_torch_learner(paste0("lr",lr,"linear_CE_unweighted_"),torch::nn_cross_entropy_loss,lr),
+      make_torch_learner(paste0("lr",lr,"linear_CE_unweighted"),torch::nn_bce_with_logits_loss,lr),
       make_torch_learner(paste0("lr",lr,"linear_Micro_AUM_weighted"),nn_weighted_AUM_micro_loss,lr),
-      make_torch_learner(paste0("lr",lr,"linear_Macro_AUM_"),nn_AUM_macro_loss,lr),
-      make_torch_learner(paste0("lr",lr,"linear_Micro_AUM_"),nn_AUM_micro_loss,lr),
-      make_torch_learner(paste0("lr",lr,"linear_CE_weighted_"),nn_weighted_ce_loss,lr))
+      make_torch_learner(paste0("lr",lr,"linear_Macro_AUM"),nn_AUM_macro_loss,lr),
+      make_torch_learner(paste0("lr",lr,"linear_Micro_AUM"),nn_AUM_micro_loss,lr),
+      make_torch_learner(paste0("lr",lr,"linear_CE_weighted"),nn_weighted_ce_loss,lr))
     )
   
 }

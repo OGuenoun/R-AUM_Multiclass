@@ -318,7 +318,7 @@ Proposed_AUM <- function(pred_tensor, label_tensor){
   torch::torch_sum(min_FPR_FNR * constant_diff)
 }
 
-four_labels <- torch::torch_tensor(c(1, 1, 2, 2), dtype = torch::torch_long())
-four_preds <- torch::torch_tensor(c(0.0,0.5,0.7,0.3))
-(ROC_AUC_macro(four_preds,four_labels))
+four_labels <- torch::torch_tensor(c(1, 2, 2, 2), dtype = torch::torch_long())
+four_preds <- torch::torch_tensor(c(0.5,0.3,0.7,0.5))
+(Proposed_AUM_macro(four_preds,four_labels))
 
