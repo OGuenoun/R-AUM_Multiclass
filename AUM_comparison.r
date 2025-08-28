@@ -6,7 +6,7 @@ library(data.table)
 (SOAK <- mlr3resampling::ResamplingSameOtherSizesCV$new())
 unb.csv.vec <- Sys.glob("~/data_Classif_unbalanced/FashionMNIST.csv")
 task.list <- list()
-data.csv <- sub("_unbalanced", "3", unb.csv.vec)
+data.csv <- sub("_unbalanced", "", unb.csv.vec)
 MNIST_dt <- fread(file=data.csv)
 subset_dt <- fread(unb.csv.vec) 
 task_dt <- data.table(subset_dt, MNIST_dt)[,  odd := factor(
