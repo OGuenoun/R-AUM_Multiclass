@@ -137,7 +137,7 @@ auc_micro <- Micro_AUC$new()
 auc_macro<-Macro_AUC$new()
 aum_micro <- Micro_AUM$new()
 aum_macro<-Macro_AUM$new()
-measure_list <- c(auc_macro,auc_micro,aum_macro,aum_micro,mlr3::msr("classif.logloss"))
+measure_list <- c(aum_macro,aum_micro,mlr3::msr("classif.logloss"))
 ## END defining custom measures
 ##Defining custom losses
 weighted_ce <- function(input,target) {

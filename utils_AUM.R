@@ -32,16 +32,26 @@ ROC_curve_micro <- function(pred_tensor, label_tensor){
     min_constant=torch::torch_cat(c(torch::torch_tensor(-1), uniq_thresh)),
     max_constant=torch::torch_cat(c(uniq_thresh, torch::torch_tensor(0))))
 }
+
 Proposed_AUM_micro<-function(pred_tensor,label_tensor){
-  if (pred_tensor$dim() == 1) {
-    n_class <- 2
+  if ((pred_tensor$ndim)==1  ) {
     pred_tensor2 <- torch::torch_stack(
       list(1 - pred_tensor, pred_tensor),
       dim = 2
     )
+    n_class <- 2
+  
   } else {
-    n_class <- pred_tensor$size(2)
-    pred_tensor2 <-pred_tensor
+    if(pred_tensor$size(2)==1){
+      pred_tensor2 <-torch::torch_cat(list(1 - pred_tensor, pred_tensor),
+                                      dim = 2)
+      n_class <- 2
+    }
+    else{
+      n_class <- pred_tensor$size(2)
+      pred_tensor2 <-pred_tensor
+    }
+    
   }
   one_hot_labels = torch::nnf_one_hot(label_tensor, num_classes=n_class) 
   is_positive = one_hot_labels
@@ -66,7 +76,7 @@ Proposed_AUM_micro<-function(pred_tensor,label_tensor){
   
   FPR = torch::torch_cat(c(torch::torch_tensor(0.0), uniq_fp_after))
   FNR = torch::torch_cat(c(uniq_fn_before, torch::torch_tensor(0.0)))
-  roc <- list(
+  roc = list(
     FPR=FPR,
     FNR=FNR,
     TPR=1 - FNR,
@@ -75,18 +85,27 @@ Proposed_AUM_micro<-function(pred_tensor,label_tensor){
     max_constant=torch::torch_cat(c(uniq_thresh, torch::torch_tensor(0))))
   min_FPR_FNR = roc[["min(FPR,FNR)"]][2:-2]
   constant_diff = roc$min_constant[2:N]$diff()
-  return(torch::torch_sum(min_FPR_FNR * constant_diff))
+  torch::torch_sum(min_FPR_FNR * constant_diff)
 }
 ROC_AUC_micro<-function(pred_tensor,label_tensor){
-  if (pred_tensor$dim() == 1) {
-    n_class <- 2
+  if ((pred_tensor$ndim)==1  ) {
     pred_tensor2 <- torch::torch_stack(
       list(1 - pred_tensor, pred_tensor),
       dim = 2
     )
+    n_class <- 2
+    
   } else {
-    n_class <- pred_tensor$size(2)
-    pred_tensor2 <-pred_tensor
+    if(pred_tensor$size(2)==1){
+      pred_tensor2 <-torch::torch_cat(list(1 - pred_tensor, pred_tensor),
+                                      dim = 2)
+      n_class <- 2
+    }
+    else{
+      n_class <- pred_tensor$size(2)
+      pred_tensor2 <-pred_tensor
+    }
+    
   }
   one_hot_labels = torch::nnf_one_hot(label_tensor, num_classes=n_class) 
   is_positive = one_hot_labels
@@ -150,17 +169,25 @@ ROC_curve_macro<-function(pred_tensor, label_tensor){
     )
     }
 Proposed_AUM_macro<-function(pred_tensor,label_tensor){
-  if (pred_tensor$dim() == 1) {
-    n_class <- 2
+  if ((pred_tensor$ndim)==1  ) {
     pred_tensor2 <- torch::torch_stack(
       list(1 - pred_tensor, pred_tensor),
       dim = 2
     )
+    n_class <- 2
+    
   } else {
-    n_class <- pred_tensor$size(2)
-    pred_tensor2 <-pred_tensor
+    if(pred_tensor$size(2)==1){
+      pred_tensor2 <-torch::torch_cat(list(1 - pred_tensor, pred_tensor),
+                                      dim = 2)
+      n_class <- 2
+    }
+    else{
+      n_class <- pred_tensor$size(2)
+      pred_tensor2 <-pred_tensor
+    }
+    
   }
-  
   one_hot_labels = torch::nnf_one_hot(label_tensor, num_classes = n_class)
   is_positive = one_hot_labels
   is_negative =1-one_hot_labels
@@ -192,15 +219,24 @@ Proposed_AUM_macro<-function(pred_tensor,label_tensor){
   mean=torch::torch_sum(sum)/actual_n_classes
 }
 ROC_AUC_macro<-function(pred_tensor,label_tensor){
-  if (pred_tensor$dim() == 1) {
-    n_class <- 2
+  if ((pred_tensor$ndim)==1  ) {
     pred_tensor2 <- torch::torch_stack(
       list(1 - pred_tensor, pred_tensor),
       dim = 2
     )
+    n_class <- 2
+    
   } else {
-    n_class <- pred_tensor$size(2)
-    pred_tensor2 <-pred_tensor
+    if(pred_tensor$size(2)==1){
+      pred_tensor2 <-torch::torch_cat(list(1 - pred_tensor, pred_tensor),
+                                      dim = 2)
+      n_class <- 2
+    }
+    else{
+      n_class <- pred_tensor$size(2)
+      pred_tensor2 <-pred_tensor
+    }
+    
   }
   one_hot_labels = torch::nnf_one_hot(label_tensor, num_classes = n_class)
   is_positive = one_hot_labels
@@ -233,15 +269,24 @@ ROC_AUC_macro<-function(pred_tensor,label_tensor){
   mean_valid = sum[present]$mean()
 }
 Proposed_AUM_micro_weighted<-function(pred_tensor,label_tensor){
-  if (pred_tensor$dim() == 1) {
-    n_class <- 2
+  if ((pred_tensor$ndim)==1  ) {
     pred_tensor2 <- torch::torch_stack(
       list(1 - pred_tensor, pred_tensor),
       dim = 2
     )
+    n_class <- 2
+    
   } else {
-    n_class <- pred_tensor$size(2)
-    pred_tensor2 <-pred_tensor
+    if(pred_tensor$size(2)==1){
+      pred_tensor2 <-torch::torch_cat(list(1 - pred_tensor, pred_tensor),
+                                      dim = 2)
+      n_class <- 2
+    }
+    else{
+      n_class <- pred_tensor$size(2)
+      pred_tensor2 <-pred_tensor
+    }
+    
   }
   N=pred_tensor$size(1)
   counts <- torch::torch_bincount(label_tensor, minlength = n_class)
@@ -272,7 +317,7 @@ Proposed_AUM_micro_weighted<-function(pred_tensor,label_tensor){
   
   FPR = torch::torch_cat(c(torch::torch_tensor(0.0), uniq_fp_after))
   FNR = torch::torch_cat(c(uniq_fn_before, torch::torch_tensor(0.0)))
-  roc <- list(
+  roc = list(
     FPR=FPR,
     FNR=FNR,
     TPR=1 - FNR,
@@ -281,7 +326,7 @@ Proposed_AUM_micro_weighted<-function(pred_tensor,label_tensor){
     max_constant=torch::torch_cat(c(uniq_thresh, torch::torch_tensor(0))))
   min_FPR_FNR = roc[["min(FPR,FNR)"]][2:-2]
   constant_diff = roc$min_constant[2:N]$diff()
-  return(torch::torch_sum(min_FPR_FNR * constant_diff))
+  torch::torch_sum(min_FPR_FNR * constant_diff)
 }
 Proposed_AUM <- function(pred_tensor, label_tensor){
   is_positive = label_tensor == 2
@@ -320,5 +365,5 @@ Proposed_AUM <- function(pred_tensor, label_tensor){
 
 four_labels <- torch::torch_tensor(c(1, 2, 2, 2), dtype = torch::torch_long())
 four_preds <- torch::torch_tensor(c(0.5,0.3,0.7,0.5))
-(Proposed_AUM_macro(four_preds,four_labels))
+#(Proposed_AUM_micro(four_preds,four_labels))
 
