@@ -169,6 +169,7 @@ ROC_curve_macro<-function(pred_tensor, label_tensor){
     )
     }
 Proposed_AUM_macro<-function(pred_tensor,label_tensor){
+  
   if ((pred_tensor$ndim)==1  ) {
     pred_tensor2 <- torch::torch_stack(
       list(1 - pred_tensor, pred_tensor),
@@ -186,18 +187,20 @@ Proposed_AUM_macro<-function(pred_tensor,label_tensor){
       n_class <- pred_tensor$size(2)
       pred_tensor2 <-pred_tensor
     }
-    
+
   }
-  one_hot_labels = torch::nnf_one_hot(label_tensor, num_classes = n_class)
+  one_hot_labels = torch::nnf_one_hot(label_tensor, num_classes=n_class) 
   is_positive = one_hot_labels
   is_negative =1-one_hot_labels
   fn_diff = -is_positive
   fp_diff = is_negative
+  
   thresh_tensor = -pred_tensor2
   fn_denom = is_positive$sum(dim = 1)$clamp(min=1)
   fp_denom = is_negative$sum(dim = 1)$clamp(min=1)
   sorted_indices = torch::torch_argsort(thresh_tensor, dim = 1)
   sorted_fp_cum = torch::torch_gather(fp_diff, dim=1, index=sorted_indices)$cumsum(1)/fp_denom
+
   sorted_fn_cum = -torch::torch_gather(fn_diff, dim=1, index=sorted_indices)$flip(1)$cumsum(1)$flip(1)/fn_denom
   sorted_thresh = torch::torch_gather(thresh_tensor, dim=1, index=sorted_indices)
   zeros_vec=torch::torch_zeros(1,n_class)
@@ -329,7 +332,7 @@ Proposed_AUM_micro_weighted<-function(pred_tensor,label_tensor){
   torch::torch_sum(min_FPR_FNR * constant_diff)
 }
 Proposed_AUM <- function(pred_tensor, label_tensor){
-  is_positive = label_tensor == 2
+  is_positive = label_tensor$flatten() == 1
   is_negative = !is_positive
   if(all(!as.logical(is_positive)) || all(!as.logical(is_negative))){
     return(torch::torch_sum(pred_tensor*0))
@@ -365,5 +368,5 @@ Proposed_AUM <- function(pred_tensor, label_tensor){
 
 four_labels <- torch::torch_tensor(c(1, 2, 2, 2), dtype = torch::torch_long())
 four_preds <- torch::torch_tensor(c(0.5,0.3,0.7,0.5))
-#(Proposed_AUM_micro(four_preds,four_labels))
+(Proposed_AUM_macro(four_preds,four_labels))
 
