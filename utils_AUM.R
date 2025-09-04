@@ -359,8 +359,8 @@ Proposed_AUM <- function(pred_tensor, label_tensor){
     FNR=FNR,
     TPR=1 - FNR,
     "min(FPR,FNR)"=torch::torch_minimum(FPR, FNR),
-    min_constant=torch::torch_cat(c(torch::torch_tensor(-1), uniq_thresh)),
-    max_constant=torch::torch_cat(c(uniq_thresh, torch::torch_tensor(0))))
+    min_constant=torch::torch_cat(c(torch::torch_tensor(-Inf), uniq_thresh)),
+    max_constant=torch::torch_cat(c(uniq_thresh, torch::torch_tensor(Inf))))
   min_FPR_FNR = roc[["min(FPR,FNR)"]][2:-2]
   constant_diff = roc$min_constant[2:N]$diff()
   torch::torch_sum(min_FPR_FNR * constant_diff)
